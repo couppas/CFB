@@ -1210,18 +1210,33 @@ function saveRankings() {
   const AP_VOTERS = 62, COACHES_VOTERS = 65;
 
   function calcFirstPlaceVotes(scored, totalVoters) {
-    // Top teams compete for first-place votes proportional to score gap
-    const top = scored.slice(0, 5);
-    const topScore = top[0].score;
-    if(topScore <= 0) return top.map((_,i) => i===0 ? totalVoters : 0);
-    // Weight = score / topScore, then normalize to totalVoters
-    const weights = top.map(({score}) => Math.max(0, score / topScore) ** 4);
-    const total = weights.reduce((a,b) => a+b, 0);
-    let votes = weights.map(w => Math.round(w / total * totalVoters));
-    // Fix rounding so sum equals totalVoters
-    const diff = totalVoters - votes.reduce((a,b) => a+b, 0);
-    votes[0] += diff;
-    return votes;
+    const top = scored.slice(0, 3);
+    const s0 = top[0].score, s1 = top[1]?.score || 0, s2 = top[2]?.score || 0;
+    if(s0 <= 0) return [totalVoters, 0, 0];
+
+    // Gap between #1 and #2 as a fraction of #1's score (0=tied, 1=infinite gap)
+    const gap01 = Math.min(1, (s0 - s1) / s0);
+    const gap12 = Math.min(1, s1 > 0 ? (s1 - s2) / s1 : 1);
+
+    // #1's share: dominant when gap is large, contested when close
+    // Ranges from ~55% (tight race) to ~99% (runaway leader)
+    const share0 = 0.55 + gap01 * 0.44;
+
+    // Remaining votes split between #2 and #3
+    const remaining = 1 - share0;
+    const share1 = remaining * (0.75 + gap12 * 0.20); // #2 gets most of remainder
+    const share2 = remaining - share1;
+
+    let v0 = Math.round(share0 * totalVoters);
+    let v1 = Math.round(share1 * totalVoters);
+    let v2 = totalVoters - v0 - v1; // absorb rounding into #3
+
+    // Clamp: #3 never goes negative, #1 always has at least 1
+    v2 = Math.max(0, v2);
+    v1 = Math.min(v1, totalVoters - v0 - v2);
+    v0 = totalVoters - v1 - v2;
+
+    return [v0, v1, v2];
   }
 
   const scored = SEASON.teams.map(t => ({t, score: calcPollScore(t, 'ap')}));
@@ -3040,7 +3055,6 @@ function renderRankingsTab(){
   if(!SEASON)return;
   const cfpUnlocked = SEASON.cfpRankings && SEASON.cfpRankings.length > 0;
 
-  // Update CFP tab state
   const cfpTab=$('ptab-cfp');
   if(cfpUnlocked){
     cfpTab.classList.remove('cfp-locked');
@@ -3054,9 +3068,16 @@ function renderRankingsTab(){
   else $('poll-content-cfp').innerHTML=`<div style="text-align:center;padding:40px 20px;color:var(--muted);"><div style="font-size:2rem;margin-bottom:12px;">🏈</div><div style="font-family:'Oswald',sans-serif;font-size:.85rem;letter-spacing:3px;text-transform:uppercase;margin-bottom:8px;color:var(--ink);">CFP Rankings</div><div style="font-size:.82rem;font-style:italic;">The CFP Selection Committee publishes its first rankings at the start of Week 9. ${SEASON.week < 9 ? `${9 - SEASON.week} week${9-SEASON.week!==1?'s':''} to go.` : 'Sim Week 9 to unlock.'}</div></div>`;
 }
 
+function setActivePoll(type){
+  if(!SEASON) return;
+  const cfpUnlocked = SEASON.cfpRankings && SEASON.cfpRankings.length > 0;
+  if(type === 'cfp' && !cfpUnlocked) return;
+  switchPoll(type);
+}
+
 function renderPoll(type){
   if(!SEASON)return;
-  let snaps, prevSnaps, label, rankKey;
+  let snaps, label, rankKey;
   if(type==='ap'){snaps=SEASON.apRankings;label='AP Poll';rankKey='pts';}
   else if(type==='coaches'){snaps=SEASON.coachesRankings;label='Coaches Poll';rankKey='pts';}
   else{snaps=SEASON.cfpRankings;label='CFP Rankings';rankKey='score';}
@@ -3071,7 +3092,6 @@ function renderPoll(type){
   if(SEASON.champion){
     wLabel = 'Final Poll';
   } else if(isPostseason){
-    // Determine which playoff round we're in by checking rounds
     const roundsDone = SEASON.playoffRounds ? SEASON.playoffRounds.filter(r=>r.games.every(g=>g.played)).length : 0;
     wLabel = playoffRoundLabels[roundsDone] || 'Playoffs';
   } else {
@@ -3088,13 +3108,14 @@ function renderPoll(type){
     else if(pR===entry.rank)mv=`<span class="move move-eq">—</span>`;
     else if(entry.rank<pR)mv=`<span class="move move-up">▲${pR-entry.rank}</span>`;
     else mv=`<span class="move move-dn">▼${entry.rank-pR}</span>`;
-    const fpvStr = (entry.rank === 1 && entry.fpv) ? `<br><span style="font-size:.6rem;color:var(--muted);">(${entry.fpv} FPV)</span>` : '';
+    const fpvStr = (entry.fpv && entry.rank <= 3) ? `<br><span style="font-size:.6rem;color:var(--muted);">(${entry.fpv} FPV)</span>` : '';
     const rc=i===0?'rank-n top1':i<5?'rank-n top5':'rank-n';
     const confChampBadge = SEASON.champion && t.idx === SEASON.champion.idx
       ? `<span style="font-size:.58rem;background:#fef9c3;color:#92400e;border:1px solid #fcd34d;padding:1px 4px;border-radius:3px;margin-left:4px;">🏆 CHAMP</span>`
       : t.isConfChamp
         ? `<span style="font-size:.58rem;background:#e8f5e9;color:#2e7d32;border:1px solid #a5d6a7;padding:1px 4px;border-radius:3px;margin-left:4px;">CCG</span>`
-        : '';    rows+=`<tr onclick="openTeamProfile(${t.idx},'screen-season')"><td><span class="${rc}">${entry.rank}</span></td><td>${mv}</td><td><div style="display:flex;align-items:center;gap:8px"><div class="t-dot" style="background:${t.color}"></div><div><div class="t-name">${t.name}${confChampBadge}</div></div></div></td><td><span class="badge badge-conf">${t.conf}</span></td><td><span class="rec-txt">${t.wins}-${t.losses}</span></td><td class="pts-cell">${entry[rankKey]||entry.pts||0}${fpvStr}</td></tr>`;
+        : '';
+    rows+=`<tr onclick="openTeamProfile(${t.idx},'screen-season')"><td><span class="${rc}">${entry.rank}</span></td><td>${mv}</td><td><div style="display:flex;align-items:center;gap:8px"><div class="t-dot" style="background:${t.color}"></div><div><div class="t-name">${t.name}${confChampBadge}</div></div></div></td><td><span class="badge badge-conf">${t.conf}</span></td><td><span class="rec-txt">${t.wins}-${t.losses}</span></td><td class="pts-cell">${entry[rankKey]||entry.pts||0}${fpvStr}</td></tr>`;
   });
   const others=cur.slice(25,40).filter(e=>((e[rankKey]||e.pts||0)>10));
   const otherTxt=others.map(e=>{const t=SEASON.teams[e.teamIdx];return`${t.name} (${t.wins}-${t.losses})`;}).join(' · ')||'None';
