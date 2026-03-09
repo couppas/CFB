@@ -363,7 +363,7 @@ select:focus{border-color:var(--navy);}
     <div style="display:flex;flex-direction:column;gap:14px;width:100%;max-width:320px;">
       <button class="btn btn-primary" style="padding:16px;font-size:1rem;letter-spacing:4px;justify-content:center;" onclick="showQuickGameFromTitle()">⚡ Quick Game</button>
       <button class="btn btn-primary" style="padding:16px;font-size:1rem;letter-spacing:4px;justify-content:center;background:var(--navy-lt);" onclick="startNewSeasonFromTitle()">🏆 New Season</button>
-      <button class="btn btn-outline" style="padding:16px;font-size:1rem;letter-spacing:4px;justify-content:center;" id="title-load-btn" onclick="showLoadFromTitle()">💾 Load Save</button>
+      <button class="btn btn-outline" style="padding:16px;font-size:1rem;letter-spacing:4px;justify-content:center;" id="title-load-btn" onclick="showLoadFromTitle()">💾 Files</button>
       <button class="btn btn-ghost" style="padding:12px;font-size:.82rem;letter-spacing:3px;justify-content:center;" id="title-cloud-btn" onclick="showCloudModal()">☁️ Cloud Sync</button>
     </div>
     <div id="title-save-status" style="margin-top:18px;font-size:.7rem;color:var(--muted2);letter-spacing:2px;"></div>
@@ -3038,7 +3038,7 @@ function switchPoll(poll){
 // ═══════════════════════════════════════════════════════
 function renderRankingsTab(){
   if(!SEASON)return;
-  const cfpUnlocked = SEASON.week >= 10;
+  const cfpUnlocked = SEASON.cfpRankings && SEASON.cfpRankings.length > 0;
 
   // Update CFP tab state
   const cfpTab=$('ptab-cfp');
@@ -3051,7 +3051,7 @@ function renderRankingsTab(){
   renderPoll('ap');
   renderPoll('coaches');
   if(cfpUnlocked) renderPoll('cfp');
-  else $('poll-content-cfp').innerHTML=`<div style="text-align:center;padding:40px;color:var(--muted);font-style:italic;">CFP Rankings are released after Week 9. Currently in Week ${SEASON.week}.</div>`;
+  else $('poll-content-cfp').innerHTML=`<div style="text-align:center;padding:40px 20px;color:var(--muted);"><div style="font-size:2rem;margin-bottom:12px;">🏈</div><div style="font-family:'Oswald',sans-serif;font-size:.85rem;letter-spacing:3px;text-transform:uppercase;margin-bottom:8px;color:var(--ink);">CFP Rankings</div><div style="font-size:.82rem;font-style:italic;">The CFP Selection Committee publishes its first rankings at the start of Week 9. ${SEASON.week < 9 ? `${9 - SEASON.week} week${9-SEASON.week!==1?'s':''} to go.` : 'Sim Week 9 to unlock.'}</div></div>`;
 }
 
 function renderPoll(type){
