@@ -364,6 +364,7 @@ select:focus{border-color:var(--navy);}
       <button class="btn btn-primary" style="padding:16px;font-size:1rem;letter-spacing:4px;justify-content:center;" onclick="showQuickGameFromTitle()">⚡ Quick Game</button>
       <button class="btn btn-primary" style="padding:16px;font-size:1rem;letter-spacing:4px;justify-content:center;background:var(--navy-lt);" onclick="startNewSeasonFromTitle()">🏆 New Season</button>
       <button class="btn btn-outline" style="padding:16px;font-size:1rem;letter-spacing:4px;justify-content:center;" id="title-load-btn" onclick="showLoadFromTitle()">💾 Load Save</button>
+      <button class="btn btn-ghost" style="padding:12px;font-size:.82rem;letter-spacing:3px;justify-content:center;" id="title-cloud-btn" onclick="showCloudModal()">☁️ Cloud Sync</button>
     </div>
     <div id="title-save-status" style="margin-top:18px;font-size:.7rem;color:var(--muted2);letter-spacing:2px;"></div>
   </div>
@@ -2716,20 +2717,25 @@ function updateContinueCard(){
   const slots=[0,1,2,3].map(s=>({slot:s,label:slotLabel(s)}));
   const hasSave=slots.some(x=>x.label!==null);
   if(!hasSave){$('continue-card').innerHTML='';return;}
+  const hasCloud = !!localStorage.getItem('cfb_gist_token');
   $('continue-card').innerHTML=`<div style="margin-bottom:8px;font-family:'Oswald',sans-serif;font-size:.72rem;letter-spacing:4px;text-transform:uppercase;color:var(--muted);">Saved Seasons</div>
   <div style="display:flex;flex-direction:column;gap:8px;">
   ${slots.map(({slot,label})=>label
     ?`<div class="card" style="padding:14px 18px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;border-color:var(--navy);">
         <div style="font-family:'Oswald',sans-serif;font-size:.82rem;font-weight:600;letter-spacing:2px;color:var(--navy);text-transform:uppercase;">${label}</div>
-        <div style="display:flex;gap:7px;">
+        <div style="display:flex;gap:7px;flex-wrap:wrap;">
           <button class="btn btn-primary btn-sm" onclick="continueSeason(${slot})">▶ Continue</button>
-          <button class="btn btn-ghost btn-sm" onclick="saveToSlot(${slot})">💾 Save Here</button>
+          <button class="btn btn-ghost btn-sm" onclick="saveToSlot(${slot})">💾 Save</button>
+          ${hasCloud?`<button class="btn btn-ghost btn-sm" onclick="cloudPush(${slot})" title="Upload to cloud">☁️↑</button><button class="btn btn-ghost btn-sm" onclick="cloudPull(${slot})" title="Download from cloud">☁️↓</button>`:''}
           <button class="btn btn-danger btn-sm" onclick="confirmDeleteSlot(${slot},event)">✕</button>
         </div>
       </div>`
     :`<div class="card" style="padding:14px 18px;display:flex;align-items:center;justify-content:space-between;border:1px dashed var(--border2);">
         <div style="font-family:'Oswald',sans-serif;font-size:.8rem;color:var(--muted);letter-spacing:2px;text-transform:uppercase;">Slot ${slot+1} — Empty</div>
-        <button class="btn btn-ghost btn-sm" onclick="saveToSlot(${slot})">💾 Save Here</button>
+        <div style="display:flex;gap:7px;">
+          <button class="btn btn-ghost btn-sm" onclick="saveToSlot(${slot})">💾 Save Here</button>
+          ${hasCloud?`<button class="btn btn-ghost btn-sm" onclick="cloudPull(${slot})" title="Download from cloud">☁️↓ Pull</button>`:''}
+        </div>
       </div>`
   ).join('')}
   </div>`;
@@ -2751,6 +2757,179 @@ function continueSeason(slot){
   }
 }
 function saveToSlot(slot){if(!SEASON){showToast('No active season.');return;}saveSeason(slot);}
+
+// ═══════════════════════════════════════════════════════
+// GITHUB GIST CLOUD SYNC
+// ═══════════════════════════════════════════════════════
+const GIST_TOKEN_KEY  = 'cfb_gist_token';
+const GIST_ID_KEY     = 'cfb_gist_id';
+const GIST_FILENAME   = 'cfb-saves.json';
+
+function gistToken(){ return localStorage.getItem(GIST_TOKEN_KEY) || ''; }
+function gistId()   { return localStorage.getItem(GIST_ID_KEY)    || ''; }
+
+async function gistRequest(method, path, body){
+  const res = await fetch(`https://api.github.com${path}`, {
+    method,
+    headers: {
+      'Authorization': `token ${gistToken()}`,
+      'Accept': 'application/vnd.github+json',
+      'Content-Type': 'application/json',
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if(!res.ok){
+    const err = await res.json().catch(()=>({}));
+    throw new Error(err.message || `HTTP ${res.status}`);
+  }
+  return res.status === 204 ? null : res.json();
+}
+
+// Find existing CFB saves Gist or create a new one
+async function findOrCreateGist(){
+  let id = gistId();
+  if(id){
+    // Verify it still exists
+    try { await gistRequest('GET', `/gists/${id}`); return id; } catch(e){ id=''; }
+  }
+  // Search existing gists for ours
+  const list = await gistRequest('GET', '/gists?per_page=100');
+  const found = list.find(g => g.files && g.files[GIST_FILENAME]);
+  if(found){ localStorage.setItem(GIST_ID_KEY, found.id); return found.id; }
+  // Create fresh
+  const created = await gistRequest('POST', '/gists', {
+    description: 'Front Office: College Football — Saves',
+    public: false,
+    files: { [GIST_FILENAME]: { content: JSON.stringify({slots:{}}) } },
+  });
+  localStorage.setItem(GIST_ID_KEY, created.id);
+  return created.id;
+}
+
+async function cloudPush(slot){
+  if(!gistToken()){ showToast('⚠ Connect GitHub first.'); showCloudModal(); return; }
+  showToast('☁️ Uploading…');
+  try {
+    const raw = localStorage.getItem(SAVE_KEYS[slot]);
+    if(!raw){ showToast('⚠ No local save in that slot.'); return; }
+    const id = await findOrCreateGist();
+    // Read current cloud data first so we only overwrite this slot
+    const gist = await gistRequest('GET', `/gists/${id}`);
+    let cloud = {};
+    try { cloud = JSON.parse(gist.files[GIST_FILENAME]?.content || '{}'); } catch(e){}
+    if(!cloud.slots) cloud.slots = {};
+    cloud.slots[slot] = JSON.parse(raw);
+    cloud.slots[slot]._savedAt = new Date().toISOString();
+    await gistRequest('PATCH', `/gists/${id}`, {
+      files: { [GIST_FILENAME]: { content: JSON.stringify(cloud) } },
+    });
+    showToast(`✓ Slot ${slot+1} uploaded to cloud`);
+  } catch(e){ showToast(`⚠ Upload failed: ${e.message}`); }
+}
+
+async function cloudPull(slot){
+  if(!gistToken()){ showToast('⚠ Connect GitHub first.'); showCloudModal(); return; }
+  showToast('☁️ Downloading…');
+  try {
+    const id = await findOrCreateGist();
+    const gist = await gistRequest('GET', `/gists/${id}`);
+    let cloud = {};
+    try { cloud = JSON.parse(gist.files[GIST_FILENAME]?.content || '{}'); } catch(e){}
+    const slotData = cloud.slots && cloud.slots[slot];
+    if(!slotData){ showToast(`⚠ No cloud save for Slot ${slot+1}`); return; }
+    const {_savedAt, ...season} = slotData;
+    localStorage.setItem(SAVE_KEYS[slot], JSON.stringify(season));
+    updateContinueCard();
+    const when = _savedAt ? ` (saved ${new Date(_savedAt).toLocaleDateString()})` : '';
+    showToast(`✓ Slot ${slot+1} downloaded${when}`);
+  } catch(e){ showToast(`⚠ Download failed: ${e.message}`); }
+}
+
+async function cloudPullAll(){
+  if(!gistToken()){ showToast('⚠ Connect GitHub first.'); return; }
+  showToast('☁️ Syncing all slots…');
+  try {
+    const id = await findOrCreateGist();
+    const gist = await gistRequest('GET', `/gists/${id}`);
+    let cloud = {};
+    try { cloud = JSON.parse(gist.files[GIST_FILENAME]?.content || '{}'); } catch(e){}
+    if(!cloud.slots || !Object.keys(cloud.slots).length){ showToast('⚠ No cloud saves found'); return; }
+    let count = 0;
+    for(const [s, data] of Object.entries(cloud.slots)){
+      if(!data) continue;
+      const {_savedAt, ...season} = data;
+      localStorage.setItem(SAVE_KEYS[parseInt(s)], JSON.stringify(season));
+      count++;
+    }
+    updateContinueCard();
+    showToast(`✓ Synced ${count} slot${count!==1?'s':''} from cloud`);
+  } catch(e){ showToast(`⚠ Sync failed: ${e.message}`); }
+}
+
+function showCloudModal(){
+  const hasToken = !!gistToken();
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(10,14,25,.55);z-index:2000;display:flex;align-items:center;justify-content:center;padding:20px;';
+  overlay.setAttribute('data-modal','');
+
+  const statusColor = hasToken ? '#16a34a' : '#9ca3af';
+  const statusText  = hasToken ? '✓ Connected' : 'Not connected';
+
+  overlay.innerHTML = `<div style="background:var(--bg);border:1px solid var(--border);border-radius:14px;padding:24px;width:100%;max-width:360px;box-shadow:0 20px 60px rgba(0,0,0,.3);">
+    <div style="font-family:'Oswald',sans-serif;font-size:.78rem;letter-spacing:4px;text-transform:uppercase;color:var(--muted);margin-bottom:18px;">☁️ GitHub Cloud Sync</div>
+
+    <div style="font-size:.8rem;color:var(--ink2);margin-bottom:16px;line-height:1.6;">
+      Saves are stored as a private GitHub Gist so you can play across devices.
+      Your saves never leave your own GitHub account.
+    </div>
+
+    <div style="margin-bottom:14px;">
+      <div style="font-size:.7rem;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:6px;">GitHub Token</div>
+      <input id="cloud-token-input" type="password" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
+        value="${hasToken ? gistToken() : ''}"
+        style="width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid var(--border);border-radius:7px;font-family:'Source Code Pro',monospace;font-size:.78rem;background:var(--surface);color:var(--ink);outline:none;">
+      <div style="font-size:.65rem;color:var(--muted2);margin-top:5px;">
+        Create at <strong>github.com → Settings → Developer settings → Personal access tokens → Tokens (classic)</strong>.
+        Only the <strong>gist</strong> scope is needed.
+      </div>
+    </div>
+
+    <div style="font-size:.7rem;margin-bottom:16px;padding:8px 12px;border-radius:6px;background:var(--surface2);border:1px solid var(--border);">
+      Status: <span style="font-weight:700;color:${statusColor};">${statusText}</span>
+      ${hasToken ? `<span style="color:var(--muted2);margin-left:8px;font-size:.65rem;">Gist ID: ${gistId()||'detecting…'}</span>` : ''}
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:8px;">
+      <button onclick="cloudSaveToken()" style="padding:10px;background:var(--navy);color:#fff;border:none;border-radius:7px;font-family:'Oswald',sans-serif;font-size:.78rem;font-weight:600;letter-spacing:2px;text-transform:uppercase;cursor:pointer;">💾 Save Token</button>
+      ${hasToken ? `<button onclick="cloudPullAll();this.closest('[data-modal]').remove();" style="padding:10px;background:#166534;color:#fff;border:none;border-radius:7px;font-family:'Oswald',sans-serif;font-size:.78rem;font-weight:600;letter-spacing:2px;text-transform:uppercase;cursor:pointer;">☁️↓ Pull All Slots from Cloud</button>` : ''}
+      ${hasToken ? `<button onclick="cloudDisconnect()" style="padding:9px;background:transparent;color:var(--muted);border:1px solid var(--border);border-radius:7px;font-family:'Oswald',sans-serif;font-size:.75rem;letter-spacing:2px;text-transform:uppercase;cursor:pointer;">Disconnect</button>` : ''}
+      <button onclick="this.closest('[data-modal]').remove();" style="padding:9px;background:var(--surface2);color:var(--ink2);border:1px solid var(--border);border-radius:7px;font-family:'Oswald',sans-serif;font-size:.75rem;letter-spacing:2px;text-transform:uppercase;cursor:pointer;">Close</button>
+    </div>
+  </div>`;
+
+  overlay.onclick = e => { if(e.target===overlay) overlay.remove(); };
+  document.body.appendChild(overlay);
+}
+
+function cloudSaveToken(){
+  const input = document.getElementById('cloud-token-input');
+  const val = input ? input.value.trim() : '';
+  if(!val){ showToast('⚠ Enter a token first.'); return; }
+  localStorage.setItem(GIST_TOKEN_KEY, val);
+  localStorage.removeItem(GIST_ID_KEY); // re-detect gist on next use
+  document.querySelector('[data-modal]')?.remove();
+  updateContinueCard();
+  showToast('✓ Token saved — cloud sync enabled');
+}
+
+function cloudDisconnect(){
+  showConfirm('Disconnect GitHub', 'Remove your GitHub token from this device? Your cloud saves are not deleted.', ()=>{
+    localStorage.removeItem(GIST_TOKEN_KEY);
+    localStorage.removeItem(GIST_ID_KEY);
+    updateContinueCard();
+    showToast('Disconnected from GitHub');
+  });
+}
 
 // ═══════════════════════════════════════════════════════
 // UI HELPERS
