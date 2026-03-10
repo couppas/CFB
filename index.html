@@ -2823,22 +2823,22 @@ async function findOrCreateGist(){
 
 async function cloudPush(slot){
   if(!gistToken()){ showToast('⚠ Connect GitHub first.'); showCloudModal(); return; }
+  if(!SEASON){ showToast('⚠ No active season to upload.'); return; }
+  if(slot !== activeSlot){ showToast('⚠ Load that slot first to push it with full box scores.'); return; }
   showToast('☁️ Uploading…');
   try {
-    const raw = localStorage.getItem(SAVE_KEYS[slot]);
-    if(!raw){ showToast('⚠ No local save in that slot.'); return; }
     const id = await findOrCreateGist();
-    // Read current cloud data first so we only overwrite this slot
     const gist = await gistRequest('GET', `/gists/${id}`);
     let cloud = {};
     try { cloud = JSON.parse(gist.files[GIST_FILENAME]?.content || '{}'); } catch(e){}
     if(!cloud.slots) cloud.slots = {};
-    cloud.slots[slot] = JSON.parse(raw);
+    // Use full in-memory SEASON (includes box scores) not stripped localStorage copy
+    cloud.slots[slot] = JSON.parse(JSON.stringify(SEASON));
     cloud.slots[slot]._savedAt = new Date().toISOString();
     await gistRequest('PATCH', `/gists/${id}`, {
       files: { [GIST_FILENAME]: { content: JSON.stringify(cloud) } },
     });
-    showToast(`✓ Slot ${slot+1} uploaded to cloud`);
+    showToast(`✓ Slot ${slot+1} uploaded with full box scores`);
   } catch(e){ showToast(`⚠ Upload failed: ${e.message}`); }
 }
 
