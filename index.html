@@ -154,19 +154,30 @@ body{background:var(--bg);color:var(--ink);font-family:'Inter',sans-serif;min-he
 .hl-masthead-sub{font-family:'Inter',sans-serif;font-size:.72rem;color:var(--muted);margin-top:4px;}
 /* Panel grid */
 .hl-panel-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;}
-.hl-panel{background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden;box-shadow:var(--shadow);display:flex;flex-direction:column;}
+.hl-panel{background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden;box-shadow:var(--shadow);display:flex;flex-direction:column;cursor:pointer;transition:border-color .15s,box-shadow .15s;}
+.hl-panel:active{opacity:.92;}
 .hl-panel-top{height:4px;flex-shrink:0;}
 .hl-panel-body{padding:12px 14px;flex:1;}
 .hl-panel-tag{font-family:'Oswald',sans-serif;font-size:.6rem;font-weight:700;letter-spacing:3px;text-transform:uppercase;margin-bottom:5px;}
 .hl-panel-headline{font-family:'Oswald',sans-serif;font-size:.95rem;font-weight:700;letter-spacing:.3px;color:var(--ink);line-height:1.2;margin-bottom:6px;}
 .hl-panel-text{font-size:.78rem;line-height:1.6;color:var(--ink2);}
 /* Lead article */
-.hl-lead{background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden;box-shadow:var(--shadow);margin-bottom:14px;}
+.hl-lead{background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden;box-shadow:var(--shadow);margin-bottom:14px;cursor:pointer;transition:border-color .15s,box-shadow .15s;}
+.hl-lead:active{opacity:.92;}
 .hl-lead-top{height:5px;}
 .hl-lead-body{padding:14px 16px;}
 .hl-lead-tag{font-family:'Oswald',sans-serif;font-size:.6rem;font-weight:700;letter-spacing:4px;text-transform:uppercase;margin-bottom:6px;}
 .hl-lead-headline{font-family:'Oswald',sans-serif;font-size:1.12rem;font-weight:700;color:var(--ink);line-height:1.2;margin-bottom:8px;}
 .hl-lead-text{font-size:.85rem;line-height:1.7;color:var(--ink2);}
+/* Panel detail sheet */
+.hl-detail-modal{position:fixed;inset:0;background:rgba(10,14,25,.55);z-index:3000;display:flex;align-items:flex-end;justify-content:center;padding:0;}
+.hl-detail-sheet{background:var(--bg);border-radius:18px 18px 0 0;width:100%;max-width:600px;max-height:88vh;overflow-y:auto;padding:0 0 env(safe-area-inset-bottom,16px);box-shadow:0 -8px 40px rgba(0,0,0,.2);}
+.hl-detail-handle{width:36px;height:4px;border-radius:2px;background:var(--border2);margin:12px auto 0;}
+.hl-detail-body{padding:18px 20px 28px;}
+.hl-detail-tag{font-family:'Oswald',sans-serif;font-size:.62rem;font-weight:700;letter-spacing:4px;text-transform:uppercase;margin-bottom:10px;}
+.hl-detail-headline{font-family:'Oswald',sans-serif;font-size:1.35rem;font-weight:700;color:var(--ink);line-height:1.25;margin-bottom:14px;}
+.hl-detail-text{font-size:.93rem;line-height:1.8;color:var(--ink2);}
+.hl-detail-extra{margin-top:16px;}
 /* Section header */
 .hl-section-hdr{font-family:'Oswald',sans-serif;font-size:.68rem;font-weight:700;letter-spacing:4px;text-transform:uppercase;color:var(--navy);padding:10px 0 7px;border-bottom:2px solid var(--border);margin-bottom:10px;}
 /* Scrollable upsets box */
@@ -3394,7 +3405,10 @@ function renderHeadlines(){
 
   function panel(accentColor, tag, headline, body){
     const tagColor = accentColor && !accentColor.startsWith('var(') ? accentColor : 'var(--navy)';
-    return `<div class="hl-panel">
+    const id = 'pd_' + Math.random().toString(36).slice(2);
+    window._panelData = window._panelData || {};
+    window._panelData[id] = {accentColor, tag, headline, body, extra:''};
+    return `<div class="hl-panel" onclick="openPanelDetail('${id}')">
       <div class="hl-panel-top" style="background:${accentColor};"></div>
       <div class="hl-panel-body">
         <div class="hl-panel-tag" style="color:${tagColor};">${tag}</div>
@@ -3406,7 +3420,10 @@ function renderHeadlines(){
 
   function lead(accentColor, tag, headline, body, extra=''){
     const tagColor = accentColor && !accentColor.startsWith('var(') ? accentColor : 'var(--navy)';
-    return `<div class="hl-lead">
+    const id = 'pd_' + Math.random().toString(36).slice(2);
+    window._panelData = window._panelData || {};
+    window._panelData[id] = {accentColor, tag, headline, body, extra};
+    return `<div class="hl-lead" onclick="openPanelDetail('${id}')">
       <div class="hl-lead-top" style="background:${accentColor};"></div>
       <div class="hl-lead-body">
         <div class="hl-lead-tag" style="color:${tagColor};">${tag}</div>
@@ -4292,7 +4309,7 @@ function renderHeadlines(){
 
       // Longest home sellout streak — iterate schedule in week order per team
       const streakByTeam={};
-      SEASON.teams.forEach((t,idx)=>{ streakByTeam[idx]={t,best:0,cur:0}; });
+      SEASON.teams.forEach(t=>{ streakByTeam[t.idx]={t,best:0,cur:0}; });
       (SEASON.schedule||[]).forEach(wk=>{
         (wk||[]).forEach(g=>{
           if(!g.played||g.homeIdx<0||!g.attendance) return;
@@ -4360,6 +4377,35 @@ function renderHeadlines(){
 
   out += `<div class="hl-source">${pollLabel} · ${editionLabel}</div>`;
   $('headlines-content').innerHTML = `<div class="hl-feed">${out}</div>`;
+}
+
+function openPanelDetail(id){
+  const d = window._panelData && window._panelData[id];
+  if(!d) return;
+  const {accentColor, tag, headline, body, extra} = d;
+
+  // Remove any existing detail modal
+  document.querySelector('.hl-detail-modal')?.remove();
+
+  const tagColor = accentColor && !accentColor.startsWith('var(') ? accentColor : 'var(--navy)';
+
+  const overlay = document.createElement('div');
+  overlay.className = 'hl-detail-modal';
+  overlay.innerHTML = `
+    <div class="hl-detail-sheet">
+      <div class="hl-detail-handle"></div>
+      <div style="height:4px;background:${accentColor};margin-top:10px;"></div>
+      <div class="hl-detail-body">
+        <div class="hl-detail-tag" style="color:${tagColor};">${tag}</div>
+        <div class="hl-detail-headline">${headline}</div>
+        <div class="hl-detail-text">${body}</div>
+        ${extra ? `<div class="hl-detail-extra">${extra}</div>` : ''}
+        <button onclick="this.closest('.hl-detail-modal').remove()" style="margin-top:20px;width:100%;padding:12px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;font-family:'Oswald',sans-serif;font-size:.75rem;letter-spacing:3px;text-transform:uppercase;color:var(--muted);cursor:pointer;">Close</button>
+      </div>
+    </div>`;
+
+  overlay.addEventListener('click', e => { if(e.target === overlay) overlay.remove(); });
+  document.body.appendChild(overlay);
 }
 
 function togglePrevWeeks(toggleEl){
@@ -5605,7 +5651,36 @@ function openBoxScore(homeTeam, awayTeam, homeScore, awayScore, boxScore, locati
 
   // Attendance + TV strip
   function attendanceStrip(att, homeTeam) {
-    const streak = (att && homeTeam.selloutStreak) || 0;
+    // Recalculate streak as of THIS specific game (not the current running total)
+    let streak = 0;
+    if(att && att.fillPct >= 98 && game && SEASON) {
+      let cur = 0, found = false;
+      outer: for(const wk of (SEASON.schedule || [])) {
+        for(const g of (wk || [])) {
+          if(!g.played || g.homeIdx !== homeTeam.idx || !g.attendance) continue;
+          if(g.attendance.fillPct >= 98) cur++; else cur = 0;
+          if(g === game) { streak = cur; found = true; break outer; }
+        }
+      }
+      if(!found) {
+        // Postseason game — walk bowls then playoffs
+        for(const g of (SEASON.bowlGames || [])) {
+          if(!g.played || g.homeIdx !== homeTeam.idx || !g.attendance) continue;
+          if(g.attendance.fillPct >= 98) cur++; else cur = 0;
+          if(g === game) { streak = cur; found = true; break; }
+        }
+        if(!found) {
+          for(const rnd of (SEASON.playoffRounds || [])) {
+            for(const g of (rnd.games || [])) {
+              if(!g.played || g.homeIdx !== homeTeam.idx || !g.attendance) continue;
+              if(g.attendance.fillPct >= 98) cur++; else cur = 0;
+              if(g === game) { streak = cur; found = true; break; }
+            }
+            if(found) break;
+          }
+        }
+      }
+    }
     const streakHTML = streak >= 1 ? `<span style="color:var(--green);font-weight:700;">🔥 ${streak} straight sellout${streak > 1 ? 's' : ''}</span>` : '';
 
     // TV row
