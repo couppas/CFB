@@ -146,6 +146,26 @@ body{background:var(--bg);color:var(--ink);font-family:'Inter',sans-serif;min-he
 .t-full{font-size:.68rem;color:var(--muted);margin-top:1px;}
 .rec-txt{font-family:'Source Code Pro',monospace;font-size:.8rem;color:var(--ink2);font-weight:600;}
 .pts-cell{font-family:'Source Code Pro',monospace;font-size:.72rem;color:var(--muted);text-align:right;}
+/* ── Rankings Headlines ─────────────────────────────── */
+.hl-feed{padding:2px 0 8px;}
+.hl-dateline{font-family:'Oswald',sans-serif;font-size:.58rem;letter-spacing:5px;text-transform:uppercase;color:var(--muted);margin-bottom:14px;padding-bottom:8px;border-bottom:2px solid var(--border);}
+.hl-item{display:flex;gap:12px;padding:13px 0;border-bottom:1px solid var(--border);}
+.hl-item:last-child{border-bottom:none;}
+.hl-accent{width:3px;border-radius:2px;flex-shrink:0;align-self:stretch;min-height:40px;}
+.hl-body{flex:1;min-width:0;}
+.hl-tag{font-family:'Oswald',sans-serif;font-size:.55rem;letter-spacing:4px;text-transform:uppercase;color:var(--muted);margin-bottom:4px;}
+.hl-headline{font-family:'Oswald',sans-serif;font-size:.92rem;font-weight:700;letter-spacing:.5px;color:var(--ink);line-height:1.25;margin-bottom:5px;}
+.hl-body-text{font-size:.78rem;line-height:1.6;color:var(--ink2);}
+.hl-badge{display:inline-block;font-family:'Source Code Pro',monospace;font-size:.62rem;font-weight:700;padding:1px 5px;border-radius:3px;margin:0 1px;}
+.hl-badge-up{background:#dcfce7;color:#14532d;}
+.hl-badge-dn{background:#fee2e2;color:#7f1d1d;}
+.hl-badge-new{background:#dbeafe;color:#1e3a8a;}
+.hl-badge-rank{background:var(--surface2);color:var(--ink2);border:1px solid var(--border);}
+[data-theme="dark"] .hl-badge-up{background:#14532d;color:#86efac;}
+[data-theme="dark"] .hl-badge-dn{background:#7f1d1d;color:#fca5a5;}
+[data-theme="dark"] .hl-badge-new{background:#1e3a5f;color:#93c5fd;}
+.hl-intro{font-size:.82rem;line-height:1.65;color:var(--ink2);padding:10px 0 16px;border-bottom:1px solid var(--border);margin-bottom:4px;}
+.hl-source{font-family:'Oswald',sans-serif;font-size:.58rem;letter-spacing:3px;text-transform:uppercase;color:var(--muted);margin-top:6px;}
 .conf-group-hdr{padding:8px 12px;background:var(--surface2);border-bottom:1px solid var(--border);border-top:1px solid var(--border);font-family:'Oswald',sans-serif;font-size:.7rem;letter-spacing:3px;text-transform:uppercase;color:var(--muted);margin-top:8px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;}
 .conf-group-hdr:first-child{margin-top:0;border-top:none;}
 .game-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px;display:grid;grid-template-columns:1fr 90px 1fr 70px;align-items:center;gap:8px;box-shadow:var(--shadow);margin-bottom:6px;}
@@ -456,10 +476,12 @@ select:focus{border-color:var(--navy);}
         <div class="poll-tab active" id="ptab-ap" onclick="switchPoll('ap')">AP Poll</div>
         <div class="poll-tab" id="ptab-coaches" onclick="switchPoll('coaches')">Coaches Poll</div>
         <div class="poll-tab cfp-locked" id="ptab-cfp" onclick="switchPoll('cfp')">CFP Rankings</div>
+      <div class="poll-tab" id="ptab-headlines" onclick="switchPoll('headlines')">Headlines</div>
       </div>
       <div id="poll-content-ap"></div>
       <div id="poll-content-coaches" style="display:none"></div>
       <div id="poll-content-cfp" style="display:none"></div>
+      <div id="poll-content-headlines" style="display:none"></div>
     </div>
     <div id="tab-schedule" style="display:none">
       <!-- Sim controls -->
@@ -3042,10 +3064,11 @@ function switchTab(tab){
 
 function switchPoll(poll){
   activePoll=poll;
-  ['ap','coaches','cfp'].forEach(p=>{
+  ['ap','coaches','cfp','headlines'].forEach(p=>{
     $(`poll-content-${p}`).style.display=p===poll?'block':'none';
     $(`ptab-${p}`).classList.toggle('active',p===poll);
   });
+  if(poll==='headlines') renderHeadlines();
 }
 
 // ═══════════════════════════════════════════════════════
@@ -3066,6 +3089,8 @@ function renderRankingsTab(){
   renderPoll('coaches');
   if(cfpUnlocked) renderPoll('cfp');
   else $('poll-content-cfp').innerHTML=`<div style="text-align:center;padding:40px 20px;color:var(--muted);"><div style="font-size:2rem;margin-bottom:12px;">🏈</div><div style="font-family:'Oswald',sans-serif;font-size:.85rem;letter-spacing:3px;text-transform:uppercase;margin-bottom:8px;color:var(--ink);">CFP Rankings</div><div style="font-size:.82rem;font-style:italic;">The CFP Selection Committee publishes its first rankings at the start of Week 9. ${SEASON.week < 9 ? `${9 - SEASON.week} week${9-SEASON.week!==1?'s':''} to go.` : 'Sim Week 9 to unlock.'}</div></div>`;
+  // Pre-render headlines so it's ready when clicked
+  renderHeadlines();
 }
 
 function setActivePoll(type){
@@ -3131,6 +3156,304 @@ function renderPoll(type){
     <tbody>${rows}</tbody></table>
   </div>
   <div class="card" style="margin-top:10px;"><div class="card-hdr"><span class="card-title">Others Receiving Votes</span></div><div class="card-body" style="font-size:.78rem;color:var(--muted);line-height:1.8;">${otherTxt}</div></div>`;
+}
+
+
+// ═══════════════════════════════════════════════════════
+// RANKINGS HEADLINES
+// ═══════════════════════════════════════════════════════
+function renderHeadlines(){
+  if(!SEASON){ $('poll-content-headlines').innerHTML=''; return; }
+
+  // Use CFP rankings once active, otherwise AP
+  const cfpUnlocked = SEASON.cfpRankings && SEASON.cfpRankings.length > 0;
+  const snaps  = cfpUnlocked ? SEASON.cfpRankings : SEASON.apRankings;
+  const rankKey = cfpUnlocked ? 'score' : 'pts';
+  const pollLabel = cfpUnlocked ? 'CFP Rankings' : 'AP Poll';
+
+  if(!snaps || !snaps.length){ $('poll-content-headlines').innerHTML=''; return; }
+
+  const cur  = snaps[snaps.length-1];
+  const prev = snaps.length > 1 ? snaps[snaps.length-2] : null;
+  const w    = SEASON.week;
+  const isPostseason = w > SEASON.totalWeeks;
+
+  let editionLabel;
+  if(SEASON.champion)       editionLabel = 'Final Edition';
+  else if(isPostseason)     editionLabel = 'Playoff Edition';
+  else if(w <= 1)           editionLabel = 'Preseason Edition';
+  else if(w === 13)         editionLabel = 'After Conf. Championships';
+  else                      editionLabel = `After Week ${w-1}`;
+
+  // Helper — get team from cur snap
+  function tOf(entry){ return SEASON.teams[entry.teamIdx]; }
+
+  // Helper — rank badge inline
+  function rb(n, cls='hl-badge-rank'){ return `<span class="hl-badge ${cls}">#${n}</span>`; }
+
+  // Helper — build one story item
+  function item(accentColor, tag, headline, body){
+    return `<div class="hl-item">
+      <div class="hl-accent" style="background:${accentColor};"></div>
+      <div class="hl-body">
+        <div class="hl-tag">${tag}</div>
+        <div class="hl-headline">${headline}</div>
+        <div class="hl-body-text">${body}</div>
+      </div>
+    </div>`;
+  }
+
+  const stories = [];
+
+  // ── PRESEASON / FIRST POLL intro ─────────────────────
+  if(!prev){
+    const no1 = cur[0]; const t1 = tOf(no1);
+    // Count by conference
+    const confCounts = {};
+    cur.slice(0,25).forEach(e=>{ const c=tOf(e).conf; confCounts[c]=(confCounts[c]||0)+1; });
+    const topConf = Object.entries(confCounts).sort((a,b)=>b[1]-a[1])[0];
+    const multipleRanked = Object.entries(confCounts).filter(([,v])=>v>=3).map(([k,v])=>`${k} (${v})`).join(', ');
+
+    stories.push(item(
+      t1.color,
+      `${pollLabel} · Preseason`,
+      `${t1.name} Opens the Season Atop the ${pollLabel}`,
+      `${t1.name} enters the year as the consensus ${rb(1)} team in the country, backed by ${no1[rankKey]||no1.pts||0} points. ` +
+      `They headline a top 25 featuring ${cur.slice(0,5).map(e=>rb(e.rank)+' '+tOf(e).name).join(', ')}.` +
+      (multipleRanked ? ` The ${topConf[0]} leads all conferences with ${topConf[1]} ranked programs.` : '')
+    ));
+
+    // Unranked notable conferences
+    const bubble = snaps[snaps.length-1].slice(25,32).filter(e=>(e[rankKey]||e.pts||0)>5);
+    if(bubble.length){
+      const bT = tOf(bubble[0]);
+      stories.push(item(
+        'var(--muted)',
+        'Bubble Watch',
+        `${bT.name} Headlines the "Others Receiving Votes" Group`,
+        `Just outside the top 25, ${bT.name} and ${bubble.length-1} other program${bubble.length>2?'s':''} are receiving votes. ` +
+        `Strong early results could push them into the rankings as soon as next week.`
+      ));
+    }
+
+  } else {
+    // ── #1 WATCH ───────────────────────────────────────
+    const cur1 = cur[0];   const curT1 = tOf(cur1);
+    const prev1 = prev[0]; const prevT1 = SEASON.teams[prev1.teamIdx];
+    if(cur1.teamIdx !== prev1.teamIdx){
+      stories.push(item(
+        curT1.color,
+        '#1 Watch · Throne Change',
+        `${curT1.name} Claims the Top Spot`,
+        `${prevT1.name} has been dethroned. ${curT1.name} ${rb(1,'hl-badge-up')} moves to the top of the ${pollLabel} ` +
+        `with ${cur1[rankKey]||cur1.pts||0} points, while ${prevT1.name} falls to ${rb(cur[0+1] && cur.find(e=>e.teamIdx===prev1.teamIdx)?.rank || '?')}.`
+      ));
+    } else {
+      // #1 held — note if FPV changed significantly
+      const prevEntry = prev.find(e=>e.teamIdx===cur1.teamIdx);
+      const fpvNote = cur1.fpv && prevEntry?.fpv && Math.abs(cur1.fpv - prevEntry.fpv) >= 5
+        ? ` Their first-place vote share ${cur1.fpv > prevEntry.fpv ? 'grew' : 'slipped'} to ${cur1.fpv} this week.`
+        : '';
+      stories.push(item(
+        curT1.color,
+        '#1 Watch',
+        `${curT1.name} Holds at ${rb(1)}`,
+        `${curT1.name} remains the unanimous choice atop the ${pollLabel} at ${curT1.wins}–${curT1.losses}.${fpvNote} ` +
+        `They lead ${rb(2)} ${tOf(cur[1]).name} by ${(cur1[rankKey]||cur1.pts||0) - (cur[1][rankKey]||cur[1].pts||0)} points.`
+      ));
+    }
+
+    // ── BIG MOVERS UP ──────────────────────────────────
+    const moversUp = cur.slice(0,25)
+      .map(e=>{ const pE=prev.find(p=>p.teamIdx===e.teamIdx); return pE&&pE.rank>25?null:{entry:e,prev:pE,jump:pE?(pE.rank-e.rank):0}; })
+      .filter(m=>m&&m.prev&&m.jump>=5)
+      .sort((a,b)=>b.jump-a.jump);
+
+    if(moversUp.length){
+      const top = moversUp[0];
+      const t = tOf(top.entry);
+      // Try to find their result this week from schedule
+      const prevWeekGames = w >= 2 ? (SEASON.schedule[w-2]||[]) : [];
+      const teamGame = prevWeekGames.find(g=>g.played&&(g.homeIdx===t.idx||g.awayIdx===t.idx));
+      let resultNote = '';
+      if(teamGame){
+        const won = teamGame.homeIdx===t.idx ? teamGame.homeScore>teamGame.awayScore : teamGame.awayScore>teamGame.homeScore;
+        const oppIdx = teamGame.homeIdx===t.idx ? teamGame.awayIdx : teamGame.homeIdx;
+        const opp = oppIdx>=0 ? SEASON.teams[oppIdx] : null;
+        const myScore = teamGame.homeIdx===t.idx ? teamGame.homeScore : teamGame.awayScore;
+        const oppScore = teamGame.homeIdx===t.idx ? teamGame.awayScore : teamGame.homeScore;
+        if(opp) resultNote = ` after ${won?'defeating':'losing to'} ${opp.name} ${myScore}–${oppScore}`;
+      }
+      const extras = moversUp.slice(1,3).map(m=>`${tOf(m.entry).name} (${rb(m.prev.rank,'hl-badge-rank')} → ${rb(m.entry.rank,'hl-badge-up')})`).join(' and ');
+      stories.push(item(
+        t.color,
+        'Movers & Shakers · Rising',
+        `${t.name} Jumps ${top.jump} Spots to ${rb(top.entry.rank,'hl-badge-up')}`,
+        `${t.name} makes the biggest climb of the week${resultNote}, vaulting from ${rb(top.prev.rank)} to ${rb(top.entry.rank,'hl-badge-up')}.` +
+        (extras ? ` Also rising: ${extras}.` : '')
+      ));
+    }
+
+    // ── BIG MOVERS DOWN ────────────────────────────────
+    const moversDn = prev.slice(0,25)
+      .map(pE=>{ const cE=cur.find(e=>e.teamIdx===pE.teamIdx); return {prev:pE,entry:cE,fall:cE?(cE.rank-pE.rank):(26-pE.rank+5)}; })
+      .filter(m=>m.fall>=5)
+      .sort((a,b)=>b.fall-a.fall);
+
+    if(moversDn.length){
+      const top = moversDn[0];
+      const t = SEASON.teams[top.prev.teamIdx];
+      const newRankStr = top.entry ? rb(top.entry.rank,'hl-badge-dn') : `<span class="hl-badge hl-badge-dn">OUT</span>`;
+      const prevWeekGames = w >= 2 ? (SEASON.schedule[w-2]||[]) : [];
+      const teamGame = prevWeekGames.find(g=>g.played&&(g.homeIdx===t.idx||g.awayIdx===t.idx));
+      let resultNote = '';
+      if(teamGame){
+        const won = teamGame.homeIdx===t.idx ? teamGame.homeScore>teamGame.awayScore : teamGame.awayScore>teamGame.homeScore;
+        const oppIdx = teamGame.homeIdx===t.idx ? teamGame.awayIdx : teamGame.homeIdx;
+        const opp = oppIdx>=0 ? SEASON.teams[oppIdx] : null;
+        const myScore = teamGame.homeIdx===t.idx ? teamGame.homeScore : teamGame.awayScore;
+        const oppScore = teamGame.homeIdx===t.idx ? teamGame.awayScore : teamGame.homeScore;
+        if(opp) resultNote = ` following their ${won?'win over':'loss to'} ${opp.name} ${myScore}–${oppScore}`;
+      }
+      stories.push(item(
+        t.color,
+        'Movers & Shakers · Falling',
+        `${t.name} Tumbles${top.entry?` to ${rb(top.entry.rank,'hl-badge-dn')}`:'Out of the Rankings'}`,
+        `${t.name} takes the biggest hit in this week's ${pollLabel}${resultNote}, dropping from ${rb(top.prev.rank)} to ${newRankStr}.` +
+        (moversDn.length>1 ? ` ${SEASON.teams[moversDn[1].prev.teamIdx].name} also fell ${moversDn[1].fall} spots.` : '')
+      ));
+    }
+
+    // ── NEW ENTRIES ────────────────────────────────────
+    const newEntries = cur.slice(0,25).filter(e=>{
+      const pE = prev.find(p=>p.teamIdx===e.teamIdx);
+      return !pE || pE.rank > 25;
+    });
+    if(newEntries.length){
+      const ne = newEntries[0]; const neT = tOf(ne);
+      const others = newEntries.slice(1).map(e=>tOf(e).name).join(', ');
+      stories.push(item(
+        neT.color,
+        'New Entries',
+        `${neT.name} Breaks Into the ${pollLabel} at ${rb(ne.rank,'hl-badge-new')}`,
+        `${neT.name} makes their debut in this week's rankings, checking in at ${rb(ne.rank,'hl-badge-new')} with a ${neT.wins}–${neT.losses} record.` +
+        (others ? ` Also newly ranked: ${others}.` : '')
+      ));
+    }
+
+    // ── DROPOUTS ───────────────────────────────────────
+    const dropouts = prev.slice(0,25).filter(pE=>{
+      const cE = cur.find(e=>e.teamIdx===pE.teamIdx);
+      return !cE || cE.rank > 25;
+    });
+    if(dropouts.length){
+      const dr = dropouts[0]; const drT = SEASON.teams[dr.teamIdx];
+      const others = dropouts.slice(1).map(d=>SEASON.teams[d.teamIdx].name).join(', ');
+      stories.push(item(
+        drT.color,
+        'Falling Out',
+        `${drT.name} Drops Out of the Top 25`,
+        `${drT.name} falls out of the rankings entirely this week after sitting at ${rb(dr.rank)} in the previous poll. ` +
+        `They'll need a strong showing to work their way back in.` +
+        (others ? ` ${others} also departed the rankings.` : '')
+      ));
+    }
+
+    // ── RANKED VS RANKED ──────────────────────────────
+    if(w >= 2){
+      const prevWeekGames = SEASON.schedule[w-2] || [];
+      const rankedMatchups = prevWeekGames.filter(g=>{
+        if(!g.played||g.homeIdx<0) return false;
+        const hR = prev.find(e=>e.teamIdx===g.homeIdx);
+        const aR = prev.find(e=>e.teamIdx===g.awayIdx);
+        return hR && hR.rank<=25 && aR && aR.rank<=25;
+      });
+      if(rankedMatchups.length){
+        const game = rankedMatchups.sort((a,b)=>{
+          const aTop = Math.min(
+            prev.find(e=>e.teamIdx===a.homeIdx)?.rank||99,
+            prev.find(e=>e.teamIdx===a.awayIdx)?.rank||99
+          );
+          const bTop = Math.min(
+            prev.find(e=>e.teamIdx===b.homeIdx)?.rank||99,
+            prev.find(e=>e.teamIdx===b.awayIdx)?.rank||99
+          );
+          return aTop - bTop;
+        })[0];
+        const hT = SEASON.teams[game.homeIdx], aT = SEASON.teams[game.awayIdx];
+        const hRank = prev.find(e=>e.teamIdx===game.homeIdx)?.rank;
+        const aRank = prev.find(e=>e.teamIdx===game.awayIdx)?.rank;
+        const winner = game.homeScore>game.awayScore ? hT : aT;
+        const loser  = game.homeScore>game.awayScore ? aT : hT;
+        const wScore = Math.max(game.homeScore,game.awayScore);
+        const lScore = Math.min(game.homeScore,game.awayScore);
+        const wRank  = game.homeScore>game.awayScore ? hRank : aRank;
+        const lRank  = game.homeScore>game.awayScore ? aRank : hRank;
+        const margin = wScore - lScore;
+        const descriptor = margin<=3?'in a thriller':margin<=10?'in a hard-fought contest':'convincingly';
+        stories.push(item(
+          winner.color,
+          'Ranked vs. Ranked',
+          `${rb(wRank)} ${winner.name} Tops ${rb(lRank)} ${loser.name}`,
+          `The marquee matchup of the week went to ${winner.name}, who dispatched ${loser.name} ${wScore}–${lScore} ${descriptor}. ` +
+          `The result shook up the poll, with ${winner.name} ${cur.find(e=>e.teamIdx===winner.idx)?.rank < wRank ? 'rising' : 'holding steady'} ` +
+          `and ${loser.name} ${cur.find(e=>e.teamIdx===loser.idx) ? 'sliding down the board' : 'falling out of the rankings'}.` +
+          (rankedMatchups.length>1?` There were ${rankedMatchups.length} top-25 matchups in all this week.`:'')
+        ));
+      }
+    }
+
+    // ── CFP CROSSCHECK ────────────────────────────────
+    if(cfpUnlocked && SEASON.apRankings.length){
+      const apCur = SEASON.apRankings[SEASON.apRankings.length-1];
+      const divergences = [];
+      cur.slice(0,15).forEach(cfpE=>{
+        const apE = apCur.find(e=>e.teamIdx===cfpE.teamIdx);
+        if(apE && Math.abs(cfpE.rank - apE.rank) >= 4){
+          divergences.push({teamIdx:cfpE.teamIdx, cfp:cfpE.rank, ap:apE.rank, diff:cfpE.rank-apE.rank});
+        }
+      });
+      if(divergences.length){
+        const top = divergences.sort((a,b)=>Math.abs(b.diff)-Math.abs(a.diff))[0];
+        const t = SEASON.teams[top.teamIdx];
+        const direction = top.diff < 0 ? 'higher' : 'lower';
+        stories.push(item(
+          t.color,
+          'CFP vs. AP · Committee Divergence',
+          `Committee Sees ${t.name} ${top.diff<0?'Higher':'Lower'} Than the Writers`,
+          `The CFP Selection Committee has ${t.name} at ${rb(top.cfp,'hl-badge-rank')}, ` +
+          `while AP voters place them at ${rb(top.ap,'hl-badge-rank')} — a ${Math.abs(top.diff)}-spot gap. ` +
+          `The Committee ranks them ${direction}, suggesting ${top.diff<0?'they value recent results and resume':'strength of schedule concerns may be weighing on the selection committee'}.`
+        ));
+      }
+    }
+
+    // ── BUBBLE WATCH ──────────────────────────────────
+    const bubble = cur.slice(25,31).filter(e=>(e[rankKey]||e.pts||0)>5);
+    if(bubble.length){
+      const bNames = bubble.slice(0,3).map(e=>{
+        const t=tOf(e); const pE=prev?prev.find(p=>p.teamIdx===e.teamIdx):null;
+        const trend = pE&&pE.rank<=25?'📉 just dropped out':pE?'📈 knocking on the door':'🆕 receiving votes';
+        return `${t.name} (${t.wins}–${t.losses}, ${trend})`;
+      }).join('; ');
+      stories.push(item(
+        'var(--border)',
+        'Bubble Watch',
+        'Just Outside: Teams on the Doorstep of the Top 25',
+        `These programs are receiving votes but haven't cracked the top 25: ${bNames}. A win next week could change that.`
+      ));
+    }
+  }
+
+  // ── RENDER ────────────────────────────────────────────
+  const pollSource = `<div class="hl-source">Source: ${pollLabel} · ${editionLabel}</div>`;
+  $('poll-content-headlines').innerHTML = `<div class="hl-feed">
+    <div class="hl-dateline">${pollLabel} Headlines · ${editionLabel}</div>
+    <div class="card" style="overflow:hidden;padding:0 14px;">
+      ${stories.join('')}
+    </div>
+    ${pollSource}
+  </div>`;
 }
 
 // ═══════════════════════════════════════════════════════
