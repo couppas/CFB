@@ -1727,6 +1727,22 @@ const LN=['Williams','Johnson','Smith','Brown','Davis','Miller','Wilson','Moore'
 function rName(){return pick(FN)+' '+pick(LN);}
 function rRating(base,delta=8){return clamp(base+rand(-delta,delta),60,99);}
 
+// Distribute a final score across quarters realistically
+function genQScores(total) {
+  const q = [0,0,0,0,0];
+  let rem = total;
+  // Each scoring play is worth 3 or 7 points
+  while(rem >= 3) {
+    const pts = (rem >= 7 && Math.random() < 0.6) ? 7 : 3;
+    if(rem - pts < 0) break;
+    const qtr = Math.floor(Math.random() * 4); // quarters 0-3
+    q[qtr] += pts;
+    rem -= pts;
+  }
+  if(rem > 0) q[Math.floor(Math.random()*4)] += rem; // absorb leftover (e.g. safety)
+  return q;
+}
+
 function generateBoxScore(offRating, defRating, myScore, oppScore, trackedStats, qScores, ot) {
   const adv = (offRating - defRating) / 100;
   const passYds = trackedStats.passYards || Math.round((myScore * 5.5 + rand(40, 90)) * (1 + adv * 0.25));
@@ -2487,8 +2503,11 @@ function openBowlBoxScore(idx) {
   const hT = SEASON.teams[game.homeIdx];
   const aT = SEASON.teams[game.awayIdx];
   if(!game.boxScore){
-    const hBS=generateBoxScore(hT.rating,aT.rating,game.homeScore,game.awayScore,{},{},false);
-    const aBS=generateBoxScore(aT.rating,hT.rating,game.awayScore,game.homeScore,{},{},false);
+    const hQ=game.homeQ||genQScores(game.homeScore);
+    const aQ=game.awayQ||genQScores(game.awayScore);
+    const ot=game.hasOT||false;
+    const hBS=generateBoxScore(hT.rating,aT.rating,game.homeScore,game.awayScore,{},hQ,ot);
+    const aBS=generateBoxScore(aT.rating,hT.rating,game.awayScore,game.homeScore,{},aQ,ot);
     game.boxScore={home:hBS,away:aBS};
   }
   openBoxScore(hT, aT, game.homeScore, game.awayScore, game.boxScore, `${game.bowl} — ${game.city}`, game.attendance, game);
@@ -2765,12 +2784,18 @@ function stopAuto(){if(autoTimer2){clearInterval(autoTimer2);autoTimer2=null;}}
 // SAVE/LOAD/RESET
 // ═══════════════════════════════════════════════════════
 function stripForSave(season) {
-  // Deep clone and remove box score data — it's regenerated on demand and is the main storage hog
-  // Keeps all scores, records, rankings, playoff data — just not the per-player stat lines
+  // Deep clone — strip per-player stat lines (storage hog) but preserve qScores
   const s = JSON.parse(JSON.stringify(season));
-  s.schedule.forEach(week => week.forEach(game => { game.boxScore = null; }));
-  if(s.playoffRounds) s.playoffRounds.forEach(r => r.games.forEach(g => { g.boxScore = null; }));
-  if(s.bowlGames) s.bowlGames.forEach(g => { g.boxScore = null; });
+  function stripGame(game) {
+    if(!game.boxScore) return;
+    game.homeQ = game.boxScore.home?.qScores || null;
+    game.awayQ = game.boxScore.away?.qScores || null;
+    game.hasOT = game.boxScore.home?.ot || false;
+    game.boxScore = null;
+  }
+  s.schedule.forEach(week => week.forEach(game => stripGame(game)));
+  if(s.playoffRounds) s.playoffRounds.forEach(r => r.games.forEach(g => stripGame(g)));
+  if(s.bowlGames) s.bowlGames.forEach(g => stripGame(g));
   return s;
 }
 
@@ -3929,6 +3954,18 @@ function renderHeadlines(){
 
     out += sectionHdr('🏆 CFP Playoff · Bracket', '14px');
 
+    if(champCrowned) {
+      const champ = SEASON.champion;
+      out += `<div style="background:linear-gradient(135deg,${champ.color}ee,${champ.color}99);border-radius:10px;padding:12px 16px;margin-bottom:12px;display:flex;align-items:center;gap:12px;">
+        <div style="font-size:1.6rem;line-height:1;">🏆</div>
+        <div>
+          <div style="font-size:.6rem;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:rgba(255,255,255,.75);margin-bottom:2px;">National Champions</div>
+          <div style="font-family:'Oswald',sans-serif;font-size:1.4rem;font-weight:700;color:#fff;line-height:1.1;text-shadow:0 1px 6px rgba(0,0,0,.3);">${champ.name}</div>
+          <div style="font-size:.65rem;color:rgba(255,255,255,.8);margin-top:2px;">${champ.wins}–${champ.losses} · CFP Champions</div>
+        </div>
+      </div>`;
+    }
+
     const roundNames=['First Round','Quarterfinals','Semifinals','National Championship'];
     // Single reversed loop: Championship first, First Round last
     [...SEASON.playoffRounds].reverse().forEach((rnd, revIdx) => {
@@ -4206,13 +4243,14 @@ function renderHeadlines(){
       if(topViewGames.length){
         const bv=topViewGames[0];
         const viewRows=topViewGames.slice(0,5).map(({g,hT,aT,v},i)=>{
-          const label=g.bowl?g.bowl:g.rivalryName?g.rivalryName:`${hT.name} vs ${aT.name}`;
+          const matchup=`${hT.name} vs ${aT.name}`;
+          const sublabel=g.bowl?`${g.bowl} · ${g.tv}`:g.rivalryName?`${g.rivalryName} · ${g.tv}`:g.tv;
           return `<div style="display:flex;align-items:center;gap:7px;padding:5px 0;border-bottom:1px solid var(--border);${i===Math.min(4,topViewGames.length-1)?'border-bottom:none;':''}">
             <span style="font-family:'Oswald',sans-serif;font-size:.75rem;font-weight:700;color:var(--muted);min-width:14px;">${i+1}</span>
             <div style="width:7px;height:7px;border-radius:50%;background:${hT.color};flex-shrink:0;"></div>
             <div style="flex:1;min-width:0;">
-              <div style="font-size:.73rem;color:var(--ink);font-weight:${i===0?700:400};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${label}</div>
-              <div style="font-size:.62rem;color:var(--muted);">${g.tv}</div>
+              <div style="font-size:.73rem;color:var(--ink);font-weight:${i===0?700:400};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${matchup}</div>
+              <div style="font-size:.62rem;color:var(--muted);">${sublabel}</div>
             </div>
             <span style="font-family:'Source Code Pro',monospace;font-size:.68rem;font-weight:${i===0?700:400};color:#7c3aed;flex-shrink:0;">${v.str}</span>
           </div>`;
@@ -5738,8 +5776,11 @@ function openGameBoxScore(weekIdx, gameIdx){
   if(!game||!game.played)return;
   if(!game.boxScore){
     const hT=SEASON.teams[game.homeIdx], aT=SEASON.teams[game.awayIdx];
-    const hBS=generateBoxScore(hT.rating,aT.rating,game.homeScore,game.awayScore,{},{},false);
-    const aBS=generateBoxScore(aT.rating,hT.rating,game.awayScore,game.homeScore,{},{},false);
+    const hQ=game.homeQ||genQScores(game.homeScore);
+    const aQ=game.awayQ||genQScores(game.awayScore);
+    const ot=game.hasOT||false;
+    const hBS=generateBoxScore(hT.rating,aT.rating,game.homeScore,game.awayScore,{},hQ,ot);
+    const aBS=generateBoxScore(aT.rating,hT.rating,game.awayScore,game.homeScore,{},aQ,ot);
     game.boxScore={home:hBS,away:aBS};
   }
   const hT=SEASON.teams[game.homeIdx], aT=SEASON.teams[game.awayIdx];
@@ -6173,9 +6214,10 @@ function renderPlayoffs(){
   let html='';
 
   if(SEASON.champion){
-    html+=`<div class="champ-card"><div class="champ-label">🏆 National Champion</div>
-      <div class="champ-name">${SEASON.champion.name}</div>
-      <div class="champ-rec">${SEASON.champion.wins}-${SEASON.champion.losses}</div></div>`;
+    const c=SEASON.champion;
+    html+=`<div class="champ-card" style="background:linear-gradient(135deg,${c.color}ee 0%,${c.color}99 100%);"><div class="champ-label">🏆 National Champion</div>
+      <div class="champ-name">${c.name}</div>
+      <div class="champ-rec">${c.wins}-${c.losses}</div></div>`;
   }
 
   // Seeds display
@@ -6210,8 +6252,11 @@ function openPlayoffBoxScore(roundIdx,gameIdx){
   if(!game||!game.played)return;
   if(!game.boxScore){
     const hT=SEASON.teams[game.homeIdx], aT=SEASON.teams[game.awayIdx];
-    const hBS=generateBoxScore(hT.rating,aT.rating,game.homeScore,game.awayScore,{},{},false);
-    const aBS=generateBoxScore(aT.rating,hT.rating,game.awayScore,game.homeScore,{},{},false);
+    const hQ=game.homeQ||genQScores(game.homeScore);
+    const aQ=game.awayQ||genQScores(game.awayScore);
+    const ot=game.hasOT||false;
+    const hBS=generateBoxScore(hT.rating,aT.rating,game.homeScore,game.awayScore,{},hQ,ot);
+    const aBS=generateBoxScore(aT.rating,hT.rating,game.awayScore,game.homeScore,{},aQ,ot);
     game.boxScore={home:hBS,away:aBS};
   }
   const hT=SEASON.teams[game.homeIdx], aT=SEASON.teams[game.awayIdx];
