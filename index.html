@@ -1112,6 +1112,19 @@ function buildSchedule(teams) {
   const usedWeeks = {};
   teams.forEach(t => { usedWeeks[t.idx] = new Set(); });
 
+  // Track home game counts for balance enforcement
+  const homeCount = {};
+  teams.forEach(t => { homeCount[t.idx] = 0; });
+
+  // Home game targets: elite P4 programs get 7, standard P4 gets 6-7, G5/Ind 6
+  function homeTarget(t) {
+    if(t.rating >= 88) return 7;          // blue bloods (Alabama, Michigan, etc.)
+    if(['SEC','B1G','B12','ACC'].includes(t.conf)) return Math.random() < 0.5 ? 6 : 7;
+    return 6;
+  }
+  const homeTargets = {};
+  teams.forEach(t => { homeTargets[t.idx] = homeTarget(t); });
+
   // Track games already scheduled between two teams (prevent duplicates)
   const paired = new Set();
   function pairKey(a, b) { return a < b ? `${a}_${b}` : `${b}_${a}`; }
@@ -1123,7 +1136,6 @@ function buildSchedule(teams) {
     if(forcedWeek) {
       weeksToTry = [forcedWeek - 1, forcedWeek - 2, forcedWeek].filter(w => w >= 0 && w < WEEKS);
     } else if(preferEarly) {
-      // Non-conf: strongly prefer weeks 0-2 (games 1-3), fallback to 3-4, last resort 5+
       const earlyWeeks = shuffleArr([0,1,2]);
       const midWeeks = shuffleArr([3,4]);
       const lateWeeks = shuffleArr([5,6,7,8,9,10,11]);
@@ -1133,14 +1145,44 @@ function buildSchedule(teams) {
     }
     for(const w of weeksToTry) {
       if(!usedWeeks[aIdx].has(w) && !usedWeeks[bIdx].has(w)) {
-        const flip = Math.random() < 0.5;
+        // Determine home team based on balance targets
+        const aTotal = usedWeeks[aIdx].size;
+        const bTotal = usedWeeks[bIdx].size;
+        const aRemaining = 12 - aTotal;
+        const bRemaining = 12 - bTotal;
+        const aHomeLeft = homeTargets[aIdx] - homeCount[aIdx];
+        const bHomeLeft = homeTargets[bIdx] - homeCount[bIdx];
+        const aAwayLeft = (12 - homeTargets[aIdx]) - (aTotal - homeCount[aIdx]);
+        const bAwayLeft = (12 - homeTargets[bIdx]) - (bTotal - homeCount[bIdx]);
+
+        let aIsHome;
+        if(aHomeLeft <= 0 && bHomeLeft > 0) {
+          // A is full on home games, B should host
+          aIsHome = false;
+        } else if(bHomeLeft <= 0 && aHomeLeft > 0) {
+          aIsHome = true;
+        } else if(aAwayLeft <= 0 && bAwayLeft > 0) {
+          // A needs more home games
+          aIsHome = true;
+        } else if(bAwayLeft <= 0 && aAwayLeft > 0) {
+          aIsHome = false;
+        } else {
+          // Both have room — bias toward whoever needs home games more,
+          // with a small random factor so it doesn't feel mechanical
+          const aNeed = aHomeLeft / Math.max(1, aRemaining);
+          const bNeed = bHomeLeft / Math.max(1, bRemaining);
+          aIsHome = Math.random() < (aNeed / (aNeed + bNeed));
+        }
+
+        const homeIdx = aIsHome ? aIdx : bIdx;
+        const awayIdx = aIsHome ? bIdx : aIdx;
         schedule[w].push({
-          homeIdx: flip ? aIdx : bIdx,
-          awayIdx: flip ? bIdx : aIdx,
+          homeIdx, awayIdx,
           played: false,
           isConfGame: isConf,
           rivalryName: rivalryName || null,
         });
+        homeCount[homeIdx]++;
         usedWeeks[aIdx].add(w);
         usedWeeks[bIdx].add(w);
         paired.add(key);
