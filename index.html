@@ -2328,7 +2328,7 @@ function renderBowls() {
   if(!SEASON.bowlGames) return;
   const apSnap = SEASON.apRankings[SEASON.apRankings.length - 1];
 
-  const tierLabels = {1:'New Year\'s Six', 2:'Major Bowls', 3:'Bowl Season'};
+  const tierLabels = {1:'New Year\u2019s Six', 2:'Major Bowls', 3:'Bowl Season'};
   const tierColors = {1:'var(--navy)', 2:'var(--green)', 3:'var(--muted)'};
 
   let html = '';
@@ -2472,6 +2472,7 @@ function simPlayoffGame(round, gameIdx) {
   }
 
   renderPlayoffs();
+  if(document.getElementById('tab-headlines').style.display !== 'none') renderHeadlines();
 }
 
 function advancePlayoffWinner(round, gameIdx, winner) {
@@ -3379,10 +3380,12 @@ function renderHeadlines(){
   // ══════════════════════════════════════════════════════
   // CHAMPIONSHIP HERO
   // ══════════════════════════════════════════════════════
+  // ══════════════════════════════════════════════════════
+  // CHAMPIONSHIP HERO + SEASON NARRATIVE
+  // ══════════════════════════════════════════════════════
   if(champCrowned) {
     const champ = SEASON.champion;
     const c1 = champ.color || '#1e3a6e';
-    // Derive a lighter tint and a darker shade
     function hexToRgb(h){ return [parseInt(h.slice(1,3),16),parseInt(h.slice(3,5),16),parseInt(h.slice(5,7),16)]; }
     function rgbToHex(r,g,b){ return '#'+[r,g,b].map(v=>Math.max(0,Math.min(255,v)).toString(16).padStart(2,'0')).join(''); }
     let c2 = c1;
@@ -3391,23 +3394,124 @@ function renderHeadlines(){
       c2 = rgbToHex(Math.round(r*0.55+20), Math.round(g*0.55+10), Math.round(b*0.55+50));
     } catch(e){}
 
-    // Championship game data
     const champGame = SEASON.playoffRounds?.[3]?.games?.[0];
     const ruIdx = champGame ? (champGame.homeIdx === champ.idx ? champGame.awayIdx : champGame.homeIdx) : -1;
     const ru = ruIdx >= 0 ? SEASON.teams[ruIdx] : null;
     const champScore = champGame ? Math.max(champGame.homeScore, champGame.awayScore) : 0;
     const ruScore    = champGame ? Math.min(champGame.homeScore, champGame.awayScore) : 0;
+    const champMargin = champScore - ruScore;
 
-    // Narrative lines
-    const P = arr => arr[Math.floor(Math.random() * arr.length)];
+    // ── Build full season narrative ──────────────────────────────────────
+    const Pn = arr => arr[Math.floor(Math.random() * arr.length)];
     const recordStr = `${champ.wins}–${champ.losses}`;
-    const marginStr = ru ? `${champScore}–${ruScore}` : '';
-    const dominance = champScore - ruScore;
-    const narrative = P([
-      `After a season that tested them at every turn, ${champ.name} stand alone at the summit of college football. The ${recordStr} Bulldogs — let that record speak for itself — did what every program dreams of and so few achieve: they ran the gauntlet, survived the bracket, and hoisted the trophy.`,
-      `Championship seasons aren't built in a single game — they're built in the summer film rooms, the November road trips, the tight wins nobody remembers by December. ${champ.name} did all of it right, and a ${recordStr} season has been rewarded with the ultimate prize.`,
-      `When the confetti fell and the trophy was raised, the only question left was: did anyone really doubt ${champ.name}? A ${recordStr} record, ${ru ? `a ${dominance > 7 ? 'dominant' : 'hard-fought'} championship victory` : 'a championship run for the ages'}, and a program that will never forget what this team accomplished.`,
+
+    // Collect champ's regular season games
+    const champGames = [];
+    (SEASON.schedule || []).forEach((wk, wi) => {
+      (wk || []).forEach(g => {
+        if(!g.played) return;
+        if(g.homeIdx === champ.idx || g.awayIdx === champ.idx) {
+          const isHome = g.homeIdx === champ.idx;
+          const opp = SEASON.teams[isHome ? g.awayIdx : g.homeIdx];
+          const cScore = isHome ? g.homeScore : g.awayScore;
+          const oScore = isHome ? g.awayScore : g.homeScore;
+          const won = cScore > oScore;
+          champGames.push({week: wi+1, g, opp, cScore, oScore, won, margin: cScore - oScore, isHome});
+        }
+      });
+    });
+
+    // Losses
+    const losses = champGames.filter(x => !x.won);
+    // Tightest wins
+    const tightWins = champGames.filter(x => x.won && x.margin <= 7).sort((a,b) => a.margin - b.margin);
+    // Blowout wins
+    const blowouts = champGames.filter(x => x.won && x.margin >= 21).sort((a,b) => b.margin - a.margin);
+    // Best win (highest-rated opponent)
+    const winsVsRanked = champGames.filter(x => x.won && getRank(x.opp.idx, SEASON.apRankings[0] || []));
+    const bestWinByRating = champGames.filter(x => x.won).sort((a,b) => b.opp.base - a.opp.base)[0];
+    // Playoff path
+    const playoffWins = [];
+    (SEASON.playoffRounds || []).forEach((rnd, ri) => {
+      rnd.games.forEach(pg => {
+        if(!pg.played) return;
+        if(pg.homeIdx === champ.idx || pg.awayIdx === champ.idx) {
+          const isHome = pg.homeIdx === champ.idx;
+          const opp = SEASON.teams[isHome ? pg.awayIdx : pg.homeIdx];
+          const cS = isHome ? pg.homeScore : pg.awayScore;
+          const oS = isHome ? pg.awayScore : pg.homeScore;
+          if(cS > oS) playoffWins.push({round: rnd.round, opp, cS, oS, margin: cS-oS});
+        }
+      });
+    });
+    // Win streak analysis
+    let maxStreak = 0, curStreak = 0;
+    champGames.forEach(x => { if(x.won){curStreak++;maxStreak=Math.max(maxStreak,curStreak);}else curStreak=0; });
+
+    // ── Narrative paragraphs ─────────────────────────────────────────────
+    // Opening
+    const opener = Pn([
+      `When the confetti rained down inside Mercedes-Benz Stadium, it confirmed what a long season had been building toward: ${champ.name} are national champions.`,
+      `College football has a new king. ${champ.name}, ${recordStr}, have climbed to the summit of the sport after a season that will be remembered for years.`,
+      `It wasn't always pretty. It wasn't always easy. But ${champ.name} are national champions, and nobody can take that away from them.`,
     ]);
+
+    // Season arc
+    let seasonArc = '';
+    if(losses.length === 0) {
+      seasonArc = `They did it the hard way — the undefeated way. A perfect regular season set the stage for a dominant postseason run, and ${champ.name} never gave their opponents a reason to believe an upset was coming.`;
+    } else if(losses.length === 1) {
+      const l = losses[0];
+      seasonArc = `The season wasn't without adversity. A Week ${l.week} loss to ${l.opp.name} — ${Math.abs(l.margin)} points — could have defined this team for the wrong reasons. Instead, it forged them. ${champ.name} didn't lose again.`;
+    } else {
+      const ls = losses.map(x => x.opp.name).join(' and ');
+      seasonArc = `With losses to ${ls} during the regular season, ${champ.name} were counted out by some. The committee believed. The players believed. They proved everyone right.`;
+    }
+
+    // High point
+    let highPoint = '';
+    if(bestWinByRating) {
+      const w = bestWinByRating;
+      const apSnap0 = SEASON.apRankings[0] || [];
+      const oppRank = getRank(w.opp.idx, SEASON.apRankings[SEASON.apRankings.length-1] || []);
+      highPoint = `The signature win came${w.week === 13 ? ' in the conference championship' : ` in Week ${w.week}`} against ${oppRank ? `#${oppRank} ` : ''}${w.opp.name}, ${w.cScore}–${w.oScore}. That result announced to the country that this team was for real.`;
+    }
+
+    // Tightest moment
+    let tightMoment = '';
+    if(tightWins.length) {
+      const t = tightWins[0];
+      tightMoment = `Their closest call came against ${t.opp.name} in Week ${t.week}, a ${t.cScore}–${t.oScore} ${t.margin === 0 ? 'overtime thriller' : `squeaker`} that tested their composure. They held on.`;
+    }
+
+    // Playoff path
+    let playoffNarrative = '';
+    if(playoffWins.length >= 2) {
+      const path = playoffWins.map(pw => {
+        const desc = pw.margin >= 14 ? 'dominated' : pw.margin <= 6 ? 'survived' : 'defeated';
+        return `${desc} ${pw.opp.name} ${pw.cS}–${pw.oS} in the ${pw.round}`;
+      });
+      playoffNarrative = `The playoff run told a story of its own. ${champ.name} ${path.join(', then ')}, before ${champMargin >= 14 ? 'finishing the job emphatically' : 'holding on in a final-seconds finish'} against ${ru ? ru.name : 'their opponent'} in the National Championship.`;
+    }
+
+    // Streak note
+    const streakNote = maxStreak >= 8
+      ? ` A ${maxStreak}-game winning streak at one point made them nearly impossible to bet against.`
+      : maxStreak >= 5 ? ` A ${maxStreak}-game winning streak at their peak set the tone for the season.` : '';
+
+    const fullNarrative = [opener, seasonArc, highPoint, tightMoment, playoffNarrative].filter(Boolean).join(' ') + streakNote;
+
+    // ── Playoff path summary strip ───────────────────────────────────────
+    const pathStrip = playoffWins.length ? `
+      <div style="margin-top:12px;border-top:1px solid rgba(255,255,255,.2);padding-top:10px;">
+        <div style="font-family:'Oswald',sans-serif;font-size:.58rem;letter-spacing:4px;text-transform:uppercase;color:rgba(255,255,255,.5);margin-bottom:6px;">Playoff Path</div>
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          ${playoffWins.map(pw=>`<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+            <span style="font-size:.68rem;color:rgba(255,255,255,.7);">${pw.round}</span>
+            <span style="font-family:'Source Code Pro',monospace;font-size:.72rem;font-weight:700;color:#fff;">${pw.cS}–${pw.oS} ${pw.opp.name}</span>
+          </div>`).join('')}
+        </div>
+      </div>` : '';
 
     out += `<div style="background:linear-gradient(135deg,${c1} 0%,${c2} 100%);border-radius:14px;overflow:hidden;margin-bottom:18px;box-shadow:0 4px 24px ${c1}55;position:relative;">
       <div style="position:absolute;inset:0;background:radial-gradient(circle at 30% 50%,${c1}44 0%,transparent 70%);pointer-events:none;"></div>
@@ -3416,536 +3520,139 @@ function renderHeadlines(){
         <div style="font-family:'Oswald',sans-serif;font-size:2rem;font-weight:700;color:#fff;line-height:1;letter-spacing:1px;text-shadow:0 2px 8px rgba(0,0,0,.3);">${champ.name}</div>
         <div style="font-family:'Source Code Pro',monospace;font-size:.85rem;color:rgba(255,255,255,.8);margin-top:4px;">${recordStr} · ${champ.conf}</div>
         ${ru && champGame ? `<div style="display:inline-flex;align-items:center;gap:6px;background:rgba(0,0,0,.25);border-radius:6px;padding:5px 10px;margin-top:10px;">
-          <span style="font-family:'Oswald',sans-serif;font-size:.82rem;font-weight:700;color:#fff;">${marginStr}</span>
+          <span style="font-family:'Oswald',sans-serif;font-size:.82rem;font-weight:700;color:#fff;">${champScore}–${ruScore}</span>
           <span style="font-size:.65rem;color:rgba(255,255,255,.65);">over ${ru.name} in the Championship</span>
         </div>` : ''}
-        <div style="margin-top:14px;font-size:.83rem;line-height:1.7;color:rgba(255,255,255,.88);font-style:italic;">${narrative}</div>
-        ${champGame ? `<div style="margin-top:12px;"><button class="btn btn-sm" style="background:rgba(255,255,255,.2);color:#fff;border:1px solid rgba(255,255,255,.35);backdrop-filter:blur(4px);" onclick="openPlayoffBoxScore(3,0)">📊 View Championship Box Score</button></div>` : ''}
+        <div style="margin-top:14px;font-size:.82rem;line-height:1.75;color:rgba(255,255,255,.9);">${fullNarrative}</div>
+        ${pathStrip}
+        ${champGame ? `<div style="margin-top:14px;"><button class="btn btn-sm" style="background:rgba(255,255,255,.2);color:#fff;border:1px solid rgba(255,255,255,.35);backdrop-filter:blur(4px);" onclick="openPlayoffBoxScore(3,0)">📊 View Championship Box Score</button></div>` : ''}
       </div>
     </div>`;
   }
 
   // ══════════════════════════════════════════════════════
-  // MASTHEAD
+  // SEASON TOTALS (post-championship)
   // ══════════════════════════════════════════════════════
-  out += `<div class="hl-masthead">
-    <div class="hl-masthead-label">Front Office · College Football</div>
-    <div class="hl-masthead-title">Headlines</div>
-    <div class="hl-masthead-sub">${editionLabel}</div>
-  </div>`;
+  if(champCrowned) {
+    const all = allPlayedGames();
+    if(all.length) {
+      out += sectionHdr('📈 Season Totals', '14px');
 
-  // ══════════════════════════════════════════════════════
-  // REGULAR SEASON SECTIONS (only shown when not in postseason)
-  // ══════════════════════════════════════════════════════
-  if(!isPostseason) {
-    // ── GAME OF THE WEEK ──────────────────────────────
-    if(w >= 1 && SEASON.gotw && SEASON.gotw[w]) {
-      const stored = SEASON.gotw[w];
-      const gi = stored.gameIdx;
-      const weekIdx = w - 1;
-      const game = SEASON.schedule[weekIdx]?.[gi];
-      if(game && game.homeIdx >= 0){
-        const hT = SEASON.teams[game.homeIdx], aT = SEASON.teams[game.awayIdx];
-        const gotwSnap = snaps.length ? snaps[snaps.length-1] : [];
-        const hRank = getRank(hT.idx, gotwSnap), aRank = getRank(aT.idx, gotwSnap);
-        const rankBadgeLabel = cfpUnlocked ? 'CFP' : 'AP';
-        const hBadge = hRank&&hRank<=25?`<span class="badge badge-ap" style="font-size:.55rem;">${rankBadgeLabel} #${hRank}</span>`:'';
-        const aBadge = aRank&&aRank<=25?`<span class="badge badge-ap" style="font-size:.55rem;">${rankBadgeLabel} #${aRank}</span>`:'';
-        const rivalBadge = game.rivalryName?`<span class="badge" style="background:#fef3c7;color:#92400e;border:1px solid #fcd34d;font-size:.58rem;">${game.rivalryName}</span>`:'';
-        if(game.played){
-          const hw = game.homeScore > game.awayScore;
-          const winT = hw?hT:aT;
-          out += lead(winT.color, `🏈 Game of the Week · ${stored.reason}`,
-            `${winT.name} ${game.homeScore}–${game.awayScore} ${hw?aT.name:hT.name}`,
-            `${hw?hBadge+' ':''}<strong>${hT.name}</strong> ${game.homeScore} &ndash; ${game.awayScore} <strong>${aT.name}</strong> ${!hw?aBadge:''}`,
-            `<div style="display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap;">${rivalBadge}<span style="font-size:.62rem;color:var(--muted2);margin-left:auto;cursor:pointer;" onclick="openGameBoxScore(${weekIdx},${gi})">📊 View box score</span></div>`
-          );
-        } else {
-          const hWinPct = Math.round(winProbability(hT.rating, aT.rating, true)*100);
-          out += `<div class="hl-lead">
-            <div class="hl-lead-top" style="background:linear-gradient(90deg,${hT.color},${aT.color});"></div>
-            <div class="hl-lead-body">
-              <div class="hl-lead-tag" style="color:var(--navy);">🏈 Game of the Week · ${stored.reason}</div>
-              <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin:8px 0;">
-                <div style="display:flex;align-items:center;gap:8px;flex:1;">
-                  <div style="width:12px;height:12px;border-radius:50%;background:${hT.color};flex-shrink:0;"></div>
-                  <span style="font-family:'Oswald',sans-serif;font-weight:700;font-size:.95rem;">${hT.name} ${hBadge}</span>
-                </div>
-                <span style="font-family:'Oswald',sans-serif;color:var(--muted);font-size:.8rem;">vs</span>
-                <div style="display:flex;align-items:center;gap:8px;flex:1;justify-content:flex-end;">
-                  <span style="font-family:'Oswald',sans-serif;font-weight:700;font-size:.95rem;">${aT.name} ${aBadge}</span>
-                  <div style="width:12px;height:12px;border-radius:50%;background:${aT.color};flex-shrink:0;"></div>
-                </div>
-              </div>
-              <div style="height:6px;border-radius:3px;background:var(--surface2);overflow:hidden;margin-bottom:5px;">
-                <div style="width:${hWinPct}%;height:100%;background:${hT.color};border-radius:3px;"></div>
-              </div>
-              <div style="display:flex;justify-content:space-between;font-size:.65rem;color:var(--muted);">
-                <span style="color:${hT.color};font-weight:700;">${hWinPct}% ${hT.name}</span>
-                <span>Win Probability</span>
-                <span style="color:${aT.color};font-weight:700;">${100-hWinPct}% ${aT.name}</span>
-              </div>
-              ${rivalBadge?`<div style="margin-top:8px;">${rivalBadge}</div>`:''}
+      const viewParse = str => parseFloat(str.replace(/[MK]/,'')) * (str.endsWith('K') ? 0.001 : 1);
+
+      // Best single-game attendance
+      let bestAttGame = null, bestAtt = 0;
+      all.forEach(({g,hT,aT})=>{
+        const att = g.attendance?.attendance || 0;
+        if(att > bestAtt){ bestAtt = att; bestAttGame = {g,hT,aT}; }
+      });
+
+      // Best-attended team (total home attendance across all home games)
+      const homeAttByTeam = {};
+      all.forEach(({g,hT,aT})=>{
+        if(!g.attendance?.attendance) return;
+        if(!homeAttByTeam[hT.idx]) homeAttByTeam[hT.idx] = {t:hT, total:0, games:0};
+        homeAttByTeam[hT.idx].total += g.attendance.attendance;
+        homeAttByTeam[hT.idx].games++;
+      });
+      const homeAttList = Object.values(homeAttByTeam).sort((a,b)=>b.total-a.total);
+      const bestHomeAtt = homeAttList[0] || null;
+
+      // Best-viewed team (total viewership across all their games, home + away)
+      const viewByTeam = {};
+      all.forEach(({g,hT,aT})=>{
+        if(!g.tv) return;
+        const v = calcViewership(g, hT, aT);
+        if(!v) return;
+        const n = viewParse(v.str);
+        [hT, aT].forEach(t => {
+          if(!viewByTeam[t.idx]) viewByTeam[t.idx] = {t, total:0, games:0};
+          viewByTeam[t.idx].total += n;
+          viewByTeam[t.idx].games++;
+        });
+      });
+      const viewList = Object.values(viewByTeam).sort((a,b)=>b.total-a.total);
+      const bestViewTeam = viewList[0] || null;
+
+      // Most-watched single game
+      const topViewGames = [];
+      all.forEach(({g,hT,aT})=>{
+        if(!g.tv) return;
+        const v = calcViewership(g, hT, aT);
+        if(!v) return;
+        topViewGames.push({g,hT,aT,v,n:viewParse(v.str)});
+      });
+      topViewGames.sort((a,b)=>b.n-a.n);
+      const bestViewGame = topViewGames[0] || null;
+      const totalViewers = topViewGames.reduce((s,x)=>s+x.n,0);
+      const totalAtt = all.reduce((s,{g})=>s+(g.attendance?.attendance||0),0);
+
+      const statPanels = [];
+
+      // Best single-game attendance
+      if(bestAttGame){
+        const {g,hT,aT}=bestAttGame;
+        statPanels.push(panel('var(--navy)','🏟 Best Single-Game Attendance',
+          `${hT.name} vs ${aT.name} · ${bestAtt.toLocaleString()}`,
+          `${bestAtt.toLocaleString()} fans packed the stadium at ${g.attendance.fillPct}% capacity.`+
+          (g.bowl?` It was the ${g.bowl}.`:g.rivalryName?` The ${g.rivalryName} rivalry drew the biggest crowd.`:'')+
+          ` Total season attendance: <strong>${totalAtt.toLocaleString()}</strong> fans across ${all.length} games.`));
+      }
+
+      // Best home attendance team
+      if(bestHomeAtt){
+        const rows = homeAttList.slice(0,5).map(({t,total,games},i)=>`
+          <div style="display:flex;align-items:center;gap:7px;padding:5px 0;border-bottom:1px solid var(--border);${i===Math.min(4,homeAttList.length-1)?'border-bottom:none;':''}">
+            <span style="font-family:'Oswald',sans-serif;font-size:.75rem;font-weight:700;color:var(--muted);min-width:14px;">${i+1}</span>
+            <div style="width:7px;height:7px;border-radius:50%;background:${t.color};flex-shrink:0;"></div>
+            <div style="flex:1;min-width:0;">
+              <div style="font-size:.73rem;color:var(--ink);font-weight:${i===0?'700':'400'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${t.name}</div>
+              <div style="font-size:.62rem;color:var(--muted);">${games} home games</div>
             </div>
-          </div>`;
-        }
+            <span style="font-family:'Source Code Pro',monospace;font-size:.68rem;font-weight:${i===0?'700':'400'};color:var(--ink2);flex-shrink:0;">${total.toLocaleString()}</span>
+          </div>`).join('');
+        statPanels.push(panel('var(--navy)','🏟 Best Home Attendance · Season',
+          `${bestHomeAtt.t.name} Draws the Biggest Crowds`,
+          `${bestHomeAtt.t.name} led all programs with <strong>${bestHomeAtt.total.toLocaleString()}</strong> total home fans across ${bestHomeAtt.games} games.<br><br>${rows}`));
       }
-    }
 
-    // ── WEEK RECAP (auto-generated narrative) ─────────
-    const currentWeekForRecap = w > 1 ? w-1 : 0;
-    if(currentWeekForRecap > 0){
-      const h = SEASON.weekHeadlines?.[currentWeekForRecap];
-      if(h && h.paragraph){
-        const weekLabel = currentWeekForRecap===13?'Conf. Championships':`Week ${currentWeekForRecap}`;
-        const totwExtra = h.totw ? buildTotwCard(h.totw) : '';
-        out += lead('var(--navy)', `📰 ${weekLabel} Recap`,
-          weekLabel==='Conf. Championships' ? 'Championship Saturday Recap' : `Week ${currentWeekForRecap} in Review`,
-          h.paragraph,
-          totwExtra ? `<div style="margin-top:10px;">${totwExtra}</div>` : ''
-        );
+      // Most-watched single game
+      if(bestViewGame){
+        const {g,hT,aT,v}=bestViewGame;
+        statPanels.push(panel('#7c3aed','📺 Most-Watched Game · Season',
+          `${hT.name} vs ${aT.name} · ${v.str} Viewers`,
+          `${g.tv} broadcast drew ${v.str} viewers${g.bowl?` for the ${g.bowl}`:''}. Season total: <strong>${totalViewers.toFixed(1)}M</strong> combined viewers.`));
       }
-    }
 
-    // ── ATTENDANCE + TV PANELS (previous week's games) ─
-    const prevWeekIdx = w - 2; // w is current (unplayed) week; w-1 was just played → index w-2
-    if(prevWeekIdx >= 0) {
-      const prevGames = (SEASON.schedule[prevWeekIdx] || []).filter(g => g.played && g.homeIdx >= 0);
-      if(prevGames.length) {
-        const weekLabel = (w-1)===13 ? 'Conf. Championships' : `Week ${w-1}`;
-
-        // Top attended
-        const byAtt = prevGames
-          .filter(g => g.attendance && g.attendance.attendance)
-          .map(g => ({g, hT:SEASON.teams[g.homeIdx], aT:SEASON.teams[g.awayIdx], att:g.attendance.attendance}))
-          .sort((a,b) => b.att - a.att).slice(0, 3);
-
-        // Top viewership
-        const byViews = prevGames
-          .filter(g => g.tv)
-          .map(g => {
-            const hT=SEASON.teams[g.homeIdx], aT=SEASON.teams[g.awayIdx];
-            const v = calcViewership(g, hT, aT);
-            if(!v) return null;
-            return {g, hT, aT, v};
-          }).filter(Boolean)
-          .sort((a,b) => {
-            const parse = s => parseFloat(s.v.str.replace(/[MK]/,'')) * (s.v.str.endsWith('K') ? 0.001 : 1);
-            return parse(b) - parse(a);
-          }).slice(0, 3);
-
-        if(byAtt.length || byViews.length) {
-          out += sectionHdr(`📊 ${weekLabel} · Stadiums &amp; Ratings`, '8px');
-          out += `<div class="hl-panel-grid">`;
-
-          // Attendance panel
-          if(byAtt.length) {
-            let attRows = byAtt.map((item, i) => {
-              const apSnap = SEASON.apRankings[SEASON.apRankings.length-1] || [];
-              const hR = getRank(item.hT.idx, apSnap), aR = getRank(item.aT.idx, apSnap);
-              const hBdg = hR&&hR<=25?` <span class="hl-badge hl-badge-rank" style="font-size:.5rem;">#${hR}</span>`:'';
-              const aBdg = aR&&aR<=25?` <span class="hl-badge hl-badge-rank" style="font-size:.5rem;">#${aR}</span>`:'';
-              return `<div style="display:flex;align-items:center;gap:7px;padding:5px 0;border-bottom:1px solid var(--border);${i===byAtt.length-1?'border-bottom:none;':''}">
-                <span style="font-family:'Oswald',sans-serif;font-size:.75rem;font-weight:700;color:var(--muted);min-width:14px;">${i+1}</span>
-                <div style="width:7px;height:7px;border-radius:50%;background:${item.hT.color};flex-shrink:0;"></div>
-                <div style="flex:1;min-width:0;">
-                  <div style="font-size:.73rem;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${item.hT.name}${hBdg} vs ${item.aT.name}${aBdg}</div>
-                  <div style="font-size:.62rem;color:var(--muted);">${item.att.toLocaleString()} · ${item.g.attendance.fillPct}% capacity</div>
-                </div>
-              </div>`;
-            }).join('');
-            out += panel('var(--navy)', '🏟 Best Attended', `Top Crowds · ${weekLabel}`, attRows);
-          } else {
-            out += `<div></div>`;
-          }
-
-          // TV Ratings panel
-          if(byViews.length) {
-            let tvRows = byViews.map((item, i) => {
-              const tierColor = item.v.tier==='mega'?'#7c3aed':item.v.tier==='high'?'#1d4ed8':item.v.tier==='mid'?'#047857':'var(--muted)';
-              return `<div style="display:flex;align-items:center;gap:7px;padding:5px 0;border-bottom:1px solid var(--border);${i===byViews.length-1?'border-bottom:none;':''}">
-                <span style="font-family:'Oswald',sans-serif;font-size:.75rem;font-weight:700;color:var(--muted);min-width:14px;">${i+1}</span>
-                <div style="width:7px;height:7px;border-radius:50%;background:${item.hT.color};flex-shrink:0;"></div>
-                <div style="flex:1;min-width:0;">
-                  <div style="font-size:.73rem;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${item.hT.name} vs ${item.aT.name}</div>
-                  <div style="font-size:.62rem;color:var(--muted);">${item.g.tv} · <span style="color:${tierColor};font-weight:700;">${item.v.str} viewers</span></div>
-                </div>
-              </div>`;
-            }).join('');
-            out += panel('#7c3aed', '📺 TV Ratings', `Most Watched · ${weekLabel}`, tvRows);
-          } else {
-            out += `<div></div>`;
-          }
-
-          out += `</div>`;
-        }
+      // Best-viewed team
+      if(bestViewTeam){
+        const rows = viewList.slice(0,5).map(({t,total,games},i)=>`
+          <div style="display:flex;align-items:center;gap:7px;padding:5px 0;border-bottom:1px solid var(--border);${i===Math.min(4,viewList.length-1)?'border-bottom:none;':''}">
+            <span style="font-family:'Oswald',sans-serif;font-size:.75rem;font-weight:700;color:var(--muted);min-width:14px;">${i+1}</span>
+            <div style="width:7px;height:7px;border-radius:50%;background:${t.color};flex-shrink:0;"></div>
+            <div style="flex:1;min-width:0;">
+              <div style="font-size:.73rem;color:var(--ink);font-weight:${i===0?'700':'400'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${t.name}</div>
+              <div style="font-size:.62rem;color:var(--muted);">${games} televised games</div>
+            </div>
+            <span style="font-family:'Source Code Pro',monospace;font-size:.68rem;font-weight:${i===0?'700':'400'};color:#7c3aed;flex-shrink:0;">${total.toFixed(1)}M</span>
+          </div>`).join('');
+        statPanels.push(panel('#7c3aed','📺 Most-Watched Program · Season',
+          `${bestViewTeam.t.name} Draws the Biggest TV Audiences`,
+          `${bestViewTeam.t.name} accumulated <strong>${bestViewTeam.total.toFixed(1)}M</strong> total viewers across ${bestViewTeam.games} televised games.<br><br>${rows}`));
       }
-    }
 
-    // ── RANKINGS PANELS (AP / CFP stories) ─────────────
-    if(snaps && snaps.length){
-      const cur  = snaps[snaps.length-1];
-      const prev = snaps.length > 1 ? snaps[snaps.length-2] : null;
-      const tOf  = e => SEASON.teams[e.teamIdx];
-
-      const panels = [];
-
-      if(!prev){
-        const no1 = cur[0]; const t1 = tOf(no1);
-        const confCounts={};
-        cur.slice(0,25).forEach(e=>{const c=tOf(e).conf;confCounts[c]=(confCounts[c]||0)+1;});
-        const topConf=Object.entries(confCounts).sort((a,b)=>b[1]-a[1])[0];
-        panels.push(panel(t1.color,'#1 Watch · Preseason',`${t1.name} Opens Atop the ${pollLabel}`,
-          `${t1.name} is the preseason ${rb(1)} team. Top five: ${cur.slice(0,5).map(e=>rb(e.rank)+' '+tOf(e).name).join(', ')}.`+
-          (topConf?` The ${topConf[0]} leads all conferences with ${topConf[1]} ranked programs.`:'')));
-        const bubble=cur.slice(25,31).filter(e=>(e[rankKey]||e.pts||0)>5);
-        if(bubble.length){
-          const bT=tOf(bubble[0]);
-          panels.push(panel('var(--muted)','Bubble Watch',`${bT.name} Leads "Others Receiving Votes"`,
-            `${bT.name} and ${bubble.length-1} other program${bubble.length>2?'s':''} are receiving votes but outside the top 25.`));
-        }
-      } else {
-        const cur1=cur[0],curT1=tOf(cur1),prev1=prev[0],prevT1=SEASON.teams[prev1.teamIdx];
-        if(cur1.teamIdx!==prev1.teamIdx){
-          panels.push(panel(curT1.color,'#1 Watch · Throne Change',`${curT1.name} Claims the Top Spot`,
-            `${prevT1.name} has been dethroned. ${curT1.name} ${rb(1,'hl-badge-up')} moves to the top of the ${pollLabel} with ${cur1[rankKey]||cur1.pts||0} points.`+
-            (()=>{const nr=cur.find(e=>e.teamIdx===prev1.teamIdx);return nr&&nr.rank<=25?` ${prevT1.name} falls to ${rb(nr.rank,'hl-badge-dn')}.`:` ${prevT1.name} drops out of the top 25.`;})()));
+      for(let i=0;i<statPanels.length;i+=2){
+        if(i+1<statPanels.length){
+          out+=`<div class="hl-panel-grid">${statPanels[i]}${statPanels[i+1]}</div>`;
         } else {
-          const prevEntry=prev.find(e=>e.teamIdx===cur1.teamIdx);
-          const fpvNote=cur1.fpv&&prevEntry?.fpv&&Math.abs(cur1.fpv-prevEntry.fpv)>=5
-            ?` First-place vote share ${cur1.fpv>prevEntry.fpv?'grew':'slipped'} to ${cur1.fpv} this week.`:'';
-          panels.push(panel(curT1.color,'#1 Watch',`${curT1.name} Holds at ${rb(1)}`,
-            `${curT1.name} remains atop the ${pollLabel} at ${curT1.wins}–${curT1.losses}.${fpvNote} Leads ${rb(2)} ${tOf(cur[1]).name} by ${(cur1[rankKey]||cur1.pts||0)-(cur[1][rankKey]||cur[1].pts||0)} points.`));
-        }
-
-        const moversUp=cur.slice(0,25)
-          .map(e=>{const pE=prev.find(p=>p.teamIdx===e.teamIdx);return pE&&pE.rank>25?null:{entry:e,prev:pE,jump:pE?(pE.rank-e.rank):0};})
-          .filter(m=>m&&m.prev&&m.jump>=5).sort((a,b)=>b.jump-a.jump);
-        if(moversUp.length){
-          const top=moversUp[0],t=tOf(top.entry);
-          const prevWeekGames=w>=2?(SEASON.schedule[w-2]||[]):[];
-          const teamGame=prevWeekGames.find(g=>g.played&&(g.homeIdx===t.idx||g.awayIdx===t.idx));
-          let resultNote='';
-          if(teamGame){
-            const won=teamGame.homeIdx===t.idx?teamGame.homeScore>teamGame.awayScore:teamGame.awayScore>teamGame.homeScore;
-            const oppIdx=teamGame.homeIdx===t.idx?teamGame.awayIdx:teamGame.homeIdx;
-            const opp=oppIdx>=0?SEASON.teams[oppIdx]:null;
-            const myScore=teamGame.homeIdx===t.idx?teamGame.homeScore:teamGame.awayScore;
-            const oppScore=teamGame.homeIdx===t.idx?teamGame.awayScore:teamGame.homeScore;
-            if(opp)resultNote=` after ${won?'defeating':'losing to'} ${opp.name} ${myScore}–${oppScore}`;
-          }
-          panels.push(panel(t.color,'Movers & Shakers · Rising',`${t.name} Jumps ${top.jump} Spots to ${rb(top.entry.rank,'hl-badge-up')}`,
-            `${t.name} makes the biggest climb${resultNote}, vaulting from ${rb(top.prev.rank)} to ${rb(top.entry.rank,'hl-badge-up')}.`+
-            (moversUp.length>1?` Also rising: ${moversUp.slice(1,3).map(m=>`${tOf(m.entry).name} (${rb(m.prev.rank)} → ${rb(m.entry.rank,'hl-badge-up')})`).join(', ')}.`:'')));
-        }
-
-        const moversDn=prev.slice(0,25)
-          .map(pE=>{const cE=cur.find(e=>e.teamIdx===pE.teamIdx);return{prev:pE,entry:cE,fall:cE?(cE.rank-pE.rank):(26-pE.rank+5)};})
-          .filter(m=>m.fall>=5).sort((a,b)=>b.fall-a.fall);
-        if(moversDn.length){
-          const top=moversDn[0],t=SEASON.teams[top.prev.teamIdx];
-          const newRankStr=top.entry&&top.entry.rank<=25?rb(top.entry.rank,'hl-badge-dn'):`<span class="hl-badge hl-badge-dn">OUT</span>`;
-          const prevWeekGames=w>=2?(SEASON.schedule[w-2]||[]):[];
-          const teamGame=prevWeekGames.find(g=>g.played&&(g.homeIdx===t.idx||g.awayIdx===t.idx));
-          let resultNote='';
-          if(teamGame){
-            const won=teamGame.homeIdx===t.idx?teamGame.homeScore>teamGame.awayScore:teamGame.awayScore>teamGame.homeScore;
-            const oppIdx=teamGame.homeIdx===t.idx?teamGame.awayIdx:teamGame.homeIdx;
-            const opp=oppIdx>=0?SEASON.teams[oppIdx]:null;
-            const myScore=teamGame.homeIdx===t.idx?teamGame.homeScore:teamGame.awayScore;
-            const oppScore=teamGame.homeIdx===t.idx?teamGame.awayScore:teamGame.homeScore;
-            if(opp)resultNote=` following their ${won?'win over':'loss to'} ${opp.name} ${myScore}–${oppScore}`;
-          }
-          panels.push(panel(t.color,'Movers & Shakers · Falling',`${t.name} Tumbles${top.entry&&top.entry.rank<=25?` to ${rb(top.entry.rank,'hl-badge-dn')}`:' Out of the Rankings'}`,
-            `${t.name} takes the biggest hit${resultNote}, dropping from ${rb(top.prev.rank)} to ${newRankStr}.`+
-            (moversDn.length>1?` ${SEASON.teams[moversDn[1].prev.teamIdx].name} also fell ${moversDn[1].fall} spots.`:'')));
-        }
-
-        const newEntries=cur.slice(0,25).filter(e=>{const pE=prev.find(p=>p.teamIdx===e.teamIdx);return!pE||pE.rank>25;});
-        if(newEntries.length){
-          const ne=newEntries[0],neT=tOf(ne);
-          panels.push(panel(neT.color,'New Entries',`${neT.name} Breaks Into the ${pollLabel} at ${rb(ne.rank,'hl-badge-new')}`,
-            `${neT.name} debuts at ${rb(ne.rank,'hl-badge-new')} with a ${neT.wins}–${neT.losses} record.`+
-            (newEntries.length>1?` Also newly ranked: ${newEntries.slice(1).map(e=>tOf(e).name).join(', ')}.`:'')));
-        }
-
-        const dropouts=prev.slice(0,25).filter(pE=>{const cE=cur.find(e=>e.teamIdx===pE.teamIdx);return!cE||cE.rank>25;});
-        if(dropouts.length){
-          const dr=dropouts[0],drT=SEASON.teams[dr.teamIdx];
-          panels.push(panel(drT.color,'Falling Out',`${drT.name} Drops Out of the Top 25`,
-            `${drT.name} falls out after sitting at ${rb(dr.rank)}.`+
-            (dropouts.length>1?` ${dropouts.slice(1).map(d=>SEASON.teams[d.teamIdx].name).join(', ')} also departed.`:'')));
-        }
-
-        if(w>=2){
-          const prevWeekGames=SEASON.schedule[w-2]||[];
-          const rvr=prevWeekGames.filter(g=>{
-            if(!g.played||g.homeIdx<0)return false;
-            const hR=prev.find(e=>e.teamIdx===g.homeIdx),aR=prev.find(e=>e.teamIdx===g.awayIdx);
-            return hR&&hR.rank<=25&&aR&&aR.rank<=25;
-          }).sort((a,b)=>{
-            const aT2=Math.min(prev.find(e=>e.teamIdx===a.homeIdx)?.rank||99,prev.find(e=>e.teamIdx===a.awayIdx)?.rank||99);
-            const bT2=Math.min(prev.find(e=>e.teamIdx===b.homeIdx)?.rank||99,prev.find(e=>e.teamIdx===b.awayIdx)?.rank||99);
-            return aT2-bT2;
-          });
-          if(rvr.length){
-            const game=rvr[0];
-            const hT=SEASON.teams[game.homeIdx],aT=SEASON.teams[game.awayIdx];
-            const hRank=prev.find(e=>e.teamIdx===game.homeIdx)?.rank;
-            const aRank=prev.find(e=>e.teamIdx===game.awayIdx)?.rank;
-            const winner=game.homeScore>game.awayScore?hT:aT;
-            const loser=game.homeScore>game.awayScore?aT:hT;
-            const wScore=Math.max(game.homeScore,game.awayScore),lScore=Math.min(game.homeScore,game.awayScore);
-            const wRank=game.homeScore>game.awayScore?hRank:aRank,lRank=game.homeScore>game.awayScore?aRank:hRank;
-            const margin=wScore-lScore;
-            const desc=margin<=3?'in a thriller':margin<=10?'in a hard-fought contest':'convincingly';
-            panels.push(panel(winner.color,'Ranked vs. Ranked',`${rb(wRank)} ${winner.name} Tops ${rb(lRank)} ${loser.name}`,
-              `${winner.name} dispatched ${loser.name} ${wScore}–${lScore} ${desc}. `+
-              `${winner.name} ${cur.find(e=>e.teamIdx===winner.idx)?.rank<wRank?'rose':'held'} in the polls while ${loser.name} ${cur.find(e=>e.teamIdx===loser.idx)?'slid down the board':'fell out of the rankings'}.`+
-              (rvr.length>1?` ${rvr.length} total top-25 matchups this week.`:'')));
-          }
-        }
-
-        if(cfpUnlocked&&SEASON.apRankings.length){
-          const apCur=SEASON.apRankings[SEASON.apRankings.length-1];
-          const divs=[];
-          cur.slice(0,15).forEach(cfpE=>{
-            const apE=apCur.find(e=>e.teamIdx===cfpE.teamIdx);
-            if(apE&&Math.abs(cfpE.rank-apE.rank)>=4)divs.push({teamIdx:cfpE.teamIdx,cfp:cfpE.rank,ap:apE.rank,diff:cfpE.rank-apE.rank});
-          });
-          if(divs.length){
-            const top=divs.sort((a,b)=>Math.abs(b.diff)-Math.abs(a.diff))[0];
-            const t=SEASON.teams[top.teamIdx];
-            panels.push(panel(t.color,'CFP vs. AP · Divergence',`Committee Sees ${t.name} ${top.diff<0?'Higher':'Lower'} Than the Writers`,
-              `CFP has ${t.name} at ${rb(top.cfp)}, while AP voters place them at ${rb(top.ap)} — a ${Math.abs(top.diff)}-spot gap.`));
-          }
-        }
-
-        const bubble=cur.slice(25,31).filter(e=>(e[rankKey]||e.pts||0)>5);
-        if(bubble.length){
-          const bNames=bubble.slice(0,3).map(e=>{
-            const t=tOf(e),pE=prev?prev.find(p=>p.teamIdx===e.teamIdx):null;
-            const trend=pE&&pE.rank<=25?'📉 just dropped out':pE?'knocking on the door':'receiving votes';
-            return `<strong>${t.name}</strong> (${t.wins}–${t.losses}, ${trend})`;
-          }).join('; ');
-          panels.push(panel('var(--border)','Bubble Watch','Just Outside the Top 25',
-            `These programs are receiving votes but haven't cracked the top 25: ${bNames}.`));
-        }
-      }
-
-      if(panels.length){
-        out += sectionHdr(`${pollLabel} · Rankings Report`, '8px');
-        for(let i=0;i<panels.length;i+=2){
-          if(i+1<panels.length){
-            out += `<div class="hl-panel-grid">${panels[i]}${panels[i+1]}</div>`;
-          } else {
-            out += `<div style="margin-bottom:10px;">${panels[i]}</div>`;
-          }
+          out+=`<div style="margin-bottom:10px;">${statPanels[i]}</div>`;
         }
       }
     }
-
-    // ── UPSET LOG ──────────────────────────────────────
-    const upsets=(SEASON.upsetLog||[]).slice().sort((a,b)=>b.level-a.level||b.ratingGap-a.ratingGap);
-    out += sectionHdr('🚨 Upset Log · Season', '4px');
-    if(!upsets.length){
-      out += `<div style="font-size:.8rem;color:var(--muted);padding:6px 0 12px;">No major upsets yet this season.</div>`;
-    } else {
-      out += `<div class="hl-scroll-box">`;
-      upsets.forEach(u=>{
-        const lvl=u.level===3
-          ?{label:'MAJOR',bg:'#450a0a',border:'#ef4444',text:'#fca5a5'}
-          :{label:'UPSET',bg:'#431407',border:'#f97316',text:'#fdba74'};
-        const weekLabel=u.week===13?'CCG':`Wk ${u.week}`;
-        const loserStr=u.loserRank&&u.loserRank<=25?`#${u.loserRank} ${u.loserName}`:u.loserName;
-        const clickable=u.weekIdx!==undefined&&u.gameIdx>=0;
-        out+=`<div class="hl-upset-row" ${clickable?`onclick="openGameBoxScore(${u.weekIdx},${u.gameIdx})"`:''}>
-          <div class="hl-upset-dot" style="background:${u.winnerColor};"></div>
-          <span class="hl-upset-badge" style="background:${lvl.bg};color:${lvl.text};border:1px solid ${lvl.border};">${lvl.label}</span>
-          <div class="hl-upset-teams">
-            <div class="hl-upset-result">${u.winnerName} ${u.winnerScore}–${u.loserScore} ${loserStr}</div>
-            <div class="hl-upset-meta">${weekLabel}${u.ratingGap>0?` · +${u.ratingGap} rating gap`:''}${u.rivalry?` · ${u.rivalry}`:''}${clickable?' · tap for box score':''}</div>
-          </div>
-          ${clickable?`<span style="font-size:.75rem;color:var(--muted);">📊</span>`:''}
-        </div>`;
-      });
-      out += `</div>`;
-    }
-
-    // ── CINDERELLA WATCH ───────────────────────────────
-    const cinderellas=SEASON.teams.filter(t=>{
-      const games=t.wins+t.losses;
-      if(games<3)return false;
-      return(t.wins/games)-((t.rating-55)/(99-55))>0.25;
-    }).map(t=>{
-      const games=t.wins+t.losses;
-      const overage=(t.wins/games)-((t.rating-55)/(99-55));
-      const apSnap=SEASON.apRankings[SEASON.apRankings.length-1];
-      const rank=getRank(t.idx,apSnap);
-      return{t,overage,rank};
-    }).sort((a,b)=>b.overage-a.overage).slice(0,6);
-    out += sectionHdr('🥿 Cinderella Watch', '14px');
-    if(!cinderellas.length){
-      out += `<div style="font-size:.8rem;color:var(--muted);padding:6px 0 12px;">No Cinderella stories yet — check back as the season develops.</div>`;
-    } else {
-      cinderellas.forEach(({t,overage,rank})=>{
-        const expectedWins=Math.round(((t.rating-55)/(99-55))*(t.wins+t.losses));
-        const barWidth=Math.min(100,Math.round(overage*200));
-        const rankStr=rank&&rank<=25?` <span class="badge badge-ap" style="font-size:.5rem;">AP #${rank}</span>`:'';
-        out+=`<div class="hl-cinder-item">
-          <div class="t-dot" style="background:${t.color};flex-shrink:0;"></div>
-          <div style="flex:1;min-width:0;">
-            <div style="font-family:'Oswald',sans-serif;font-size:.82rem;font-weight:700;color:var(--ink);">${t.name}${rankStr}</div>
-            <div style="font-size:.65rem;color:var(--muted);">${t.wins}–${t.losses} · Expected ~${expectedWins} wins · Rating ${t.rating}</div>
-          </div>
-          <div class="hl-cinder-bar-wrap" style="width:80px;"><div class="hl-cinder-bar" style="width:${barWidth}%;"></div></div>
-        </div>`;
-      });
-    }
-  } // end !isPostseason
-
-  // ══════════════════════════════════════════════════════
-  // BOWL SEASON SECTION
-  // ══════════════════════════════════════════════════════
-  if(inBowls && SEASON.bowlGames && SEASON.bowlGames.length) {
-    const apSnap = SEASON.apRankings[SEASON.apRankings.length - 1] || [];
-    const bowls  = SEASON.bowlGames;
-    const played = bowls.filter(g => g.played);
-    const unplayed = bowls.filter(g => !g.played);
-
-    out += sectionHdr('🏈 Bowl Season · AP Poll', isPostseason ? '4px' : '14px');
-
-    // Story panels
-    const bowlPanels = [];
-
-    if(played.length) {
-      // Best result — biggest upset
-      const upsets = played.map(g => {
-        const hT=SEASON.teams[g.homeIdx], aT=SEASON.teams[g.awayIdx];
-        const hw=g.homeScore>g.awayScore;
-        const winner=hw?hT:aT, loser=hw?aT:hT;
-        const wRank=getRank(winner.idx,apSnap), lRank=getRank(loser.idx,apSnap);
-        const rGap=loser.rating-winner.rating;
-        return{g,winner,loser,wRank,lRank,rGap,ws:hw?g.homeScore:g.awayScore,ls:hw?g.awayScore:g.homeScore};
-      }).filter(x=>x.lRank&&x.lRank<=25&&(!x.wRank||x.wRank>25)).sort((a,b)=>a.lRank-b.lRank);
-
-      if(upsets.length) {
-        const u=upsets[0];
-        const globalIdx=bowls.indexOf(u.g);
-        bowlPanels.push(panel(u.winner.color,'🚨 Bowl Upset',
-          `${u.winner.name} Shocks ${rb(u.lRank,'hl-badge-dn')} ${u.loser.name}`,
-          `${u.winner.name} knocked off ${u.lRank?`#${u.lRank} `:''}${u.loser.name} ${u.ws}–${u.ls} in the ${u.g.bowl}.`+
-          (upsets.length>1?` ${upsets.length} bowl upsets total.`:'')+
-          (globalIdx>=0?` <span style="font-size:.62rem;color:var(--muted2);cursor:pointer;" onclick="switchPostseasonTab('bowls');openBowlBoxScore(${globalIdx})">📊 Box score</span>`:'')));
-      }
-
-      // Best game (closest margin among tier 1/2)
-      const notable = played.filter(g=>g.tier<=2).map(g=>{
-        const margin=Math.abs(g.homeScore-g.awayScore);
-        const hT=SEASON.teams[g.homeIdx],aT=SEASON.teams[g.awayIdx];
-        return{g,margin,hT,aT};
-      }).sort((a,b)=>a.margin-b.margin);
-      if(notable.length){
-        const best=notable[0];
-        const hw=best.g.homeScore>best.g.awayScore;
-        const winT=hw?best.hT:best.aT, loseT=hw?best.aT:best.hT;
-        const globalIdx=bowls.indexOf(best.g);
-        bowlPanels.push(panel(winT.color,'🎯 Game of the Bowls',
-          `${winT.name} Edges ${loseT.name} in ${best.g.bowl}`,
-          `${winT.name} survived ${loseT.name} ${best.g.homeScore}–${best.g.awayScore} in what was the most compelling bowl matchup.`+
-          (globalIdx>=0?` <span style="font-size:.62rem;color:var(--muted2);cursor:pointer;" onclick="switchPostseasonTab('bowls');openBowlBoxScore(${globalIdx})">📊 Box score</span>`:'')));
-      }
-
-      // Conference bowl record
-      const confRecord = {};
-      played.forEach(g=>{
-        const hT=SEASON.teams[g.homeIdx],aT=SEASON.teams[g.awayIdx];
-        const hw=g.homeScore>g.awayScore;
-        const wConf=(hw?hT:aT).conf, lConf=(hw?aT:hT).conf;
-        if(!confRecord[wConf]) confRecord[wConf]={w:0,l:0};
-        if(!confRecord[lConf]) confRecord[lConf]={w:0,l:0};
-        confRecord[wConf].w++;
-        confRecord[lConf].l++;
-      });
-      const confList=Object.entries(confRecord)
-        .filter(([,r])=>r.w+r.l>=2)
-        .sort((a,b)=>(b[1].w/(b[1].w+b[1].l))-(a[1].w/(a[1].w+a[1].l)));
-      if(confList.length>=2){
-        const best2=confList[0], worst=confList[confList.length-1];
-        bowlPanels.push(panel('var(--navy)','📊 Conference Bowl Report',
-          `${best2[0]} Leads, ${worst[0]} Struggles`,
-          `${best2[0]} is ${best2[1].w}–${best2[1].l} in bowls, the best record among major conferences. ` +
-          `${worst[0]} is ${worst[1].w}–${worst[1].l}. `+
-          confList.slice(0,4).map(([c,r])=>`${c}: ${r.w}–${r.l}`).join(' · ')+'.'));
-      }
-    }
-
-    // Upcoming highlights
-    if(unplayed.length) {
-      const upcomingTier1 = unplayed.filter(g=>g.tier===1);
-      if(upcomingTier1.length){
-        const g=upcomingTier1[0];
-        const hT=SEASON.teams[g.homeIdx],aT=SEASON.teams[g.awayIdx];
-        const hRank=getRank(hT.idx,apSnap),aRank=getRank(aT.idx,apSnap);
-        const hWinPct=Math.round(winProbability(hT.rating,aT.rating,false)*100);
-        const matchupStr=`${hRank?`#${hRank} `:''}${hT.name} vs ${aRank?`#${aRank} `:''}${aT.name}`;
-        bowlPanels.push(panel(hT.color,'🔜 Upcoming · New Year\'s Six',
-          `${g.bowl}: ${matchupStr}`,
-          `${hT.name} (${hT.wins}–${hT.losses}) faces ${aT.name} (${aT.wins}–${aT.losses}) in ${g.city}. Win probability: ${hT.name} ${hWinPct}%, ${aT.name} ${100-hWinPct}%.`));
-      }
-    }
-
-    if(bowlPanels.length){
-      for(let i=0;i<bowlPanels.length;i+=2){
-        if(i+1<bowlPanels.length){
-          out += `<div class="hl-panel-grid">${bowlPanels[i]}${bowlPanels[i+1]}</div>`;
-        } else {
-          out += `<div style="margin-bottom:10px;">${bowlPanels[i]}</div>`;
-        }
-      }
-    }
-
-    // Bowl game list — compact scrollable
-    out += `<div style="font-family:'Oswald',sans-serif;font-size:.62rem;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:var(--muted);margin:10px 0 6px;">All Bowl Games</div>`;
-    const tierLabels={1:'New Year\'s Six',2:'Major Bowls',3:'Bowl Season'};
-    [1,2,3].forEach(tier=>{
-      const tierBowls=bowls.filter(g=>g.tier===tier);
-      if(!tierBowls.length)return;
-      out+=`<div style="font-size:.62rem;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--navy);margin:8px 0 4px;">${tierLabels[tier]}</div>`;
-      out+=`<div class="hl-scroll-box" style="max-height:180px;margin-bottom:8px;">`;
-      tierBowls.forEach(g=>{
-        const hT=SEASON.teams[g.homeIdx],aT=SEASON.teams[g.awayIdx];
-        const globalIdx=bowls.indexOf(g);
-        const hRank=getRank(hT.idx,apSnap),aRank=getRank(aT.idx,apSnap);
-        const hBdg=hRank&&hRank<=25?` <span class="hl-badge hl-badge-rank" style="font-size:.5rem;">#${hRank}</span>`:'';
-        const aBdg=aRank&&aRank<=25?` <span class="hl-badge hl-badge-rank" style="font-size:.5rem;">#${aRank}</span>`:'';
-        const hw=g.played&&g.homeScore>g.awayScore;
-        const aw=g.played&&g.awayScore>g.homeScore;
-        out+=`<div class="hl-upset-row" style="flex-direction:column;align-items:flex-start;gap:3px;cursor:${g.played?'pointer':'default'};"
-          ${g.played?`onclick="switchPostseasonTab('bowls');openBowlBoxScore(${globalIdx})"`:''}>
-          <div style="display:flex;width:100%;align-items:center;justify-content:space-between;">
-            <span style="font-family:'Oswald',sans-serif;font-size:.72rem;font-weight:700;color:var(--navy);">${g.bowl}</span>
-            <span style="font-size:.58rem;color:var(--muted);">📍 ${g.city}</span>
-          </div>
-          <div style="display:flex;width:100%;align-items:center;gap:6px;">
-            <div style="width:7px;height:7px;border-radius:50%;background:${hT.color};flex-shrink:0;"></div>
-            <span style="font-size:.73rem;color:var(--ink);font-weight:${hw?'700':'400'};">${hT.name}${hBdg}</span>
-            <span style="font-size:.75rem;font-weight:700;color:${hw?'var(--ink)':'var(--muted)'};margin-left:auto;">${g.played?g.homeScore:'—'}</span>
-          </div>
-          <div style="display:flex;width:100%;align-items:center;gap:6px;">
-            <div style="width:7px;height:7px;border-radius:50%;background:${aT.color};flex-shrink:0;"></div>
-            <span style="font-size:.73rem;color:var(--ink);font-weight:${aw?'700':'400'};">${aT.name}${aBdg}</span>
-            <span style="font-size:.75rem;font-weight:700;color:${aw?'var(--ink)':'var(--muted)'};margin-left:auto;">${g.played?g.awayScore:'—'}</span>
-          </div>
-          ${g.played?`<div style="font-size:.58rem;color:var(--muted2);">📊 tap for box score</div>`:''}
-        </div>`;
-      });
-      out+=`</div>`;
-    });
   }
 
   // ══════════════════════════════════════════════════════
-  // PLAYOFF SECTION
+  // PLAYOFF SECTION (postseason, CFP-driven, above bowls)
   // ══════════════════════════════════════════════════════
   if(inPlayoffs && SEASON.playoffRounds) {
     const cfpSnap = SEASON.cfpRankings && SEASON.cfpRankings.length
@@ -3953,47 +3660,43 @@ function renderHeadlines(){
     const pRankSnap = cfpSnap || (SEASON.apRankings[SEASON.apRankings.length-1] || []);
     const pRankLabel = cfpSnap ? 'CFP' : 'AP';
     const pRankBadgeCls = cfpSnap ? 'badge-cfp' : 'badge-ap';
+    const roundNames = ['First Round','Quarterfinals','Semifinals','National Championship'];
 
-    out += sectionHdr('🏆 CFP Playoff · Bracket', '14px');
+    out += sectionHdr('🏆 CFP Playoff · Bracket', champCrowned ? '14px' : '4px');
 
-    const roundNames=['First Round','Quarterfinals','Semifinals','National Championship'];
+    // Story panels per round
     const playoffPanels = [];
-
     SEASON.playoffRounds.forEach((rnd, roundIdx) => {
       const playedGames = rnd.games.filter(g=>g.played&&g.homeIdx>=0);
-      const unplayedGames = rnd.games.filter(g=>!g.played&&g.homeIdx>=0&&g.awayIdx>=0);
+      if(!playedGames.length) return;
 
-      // Story panels per round
-      if(playedGames.length) {
-        const upsets = playedGames.map(g=>{
-          const hT=SEASON.teams[g.homeIdx],aT=SEASON.teams[g.awayIdx];
-          const hw=g.homeScore>g.awayScore;
-          const winner=hw?hT:aT,loser=hw?aT:hT;
-          const wR=getRank(winner.idx,pRankSnap),lR=getRank(loser.idx,pRankSnap);
-          const rGap=loser.rating-winner.rating;
-          return{g,winner,loser,wR,lR,rGap,ws:hw?g.homeScore:g.awayScore,ls:hw?g.awayScore:g.homeScore};
-        }).filter(x=>x.rGap>=8||(x.lR&&(!x.wR||x.wR>x.lR+3))).sort((a,b)=>b.rGap-a.rGap);
+      const upsets = playedGames.map(g=>{
+        const hT=SEASON.teams[g.homeIdx],aT=SEASON.teams[g.awayIdx];
+        const hw=g.homeScore>g.awayScore;
+        const winner=hw?hT:aT,loser=hw?aT:hT;
+        const wR=getRank(winner.idx,pRankSnap),lR=getRank(loser.idx,pRankSnap);
+        const rGap=loser.rating-winner.rating;
+        return{g,winner,loser,wR,lR,rGap,ws:hw?g.homeScore:g.awayScore,ls:hw?g.awayScore:g.homeScore};
+      }).filter(x=>x.rGap>=8||(x.lR&&(!x.wR||x.wR>x.lR+3))).sort((a,b)=>b.rGap-a.rGap);
 
-        if(upsets.length) {
-          const u=upsets[0];
-          const wRankStr=u.wR?`${rb(u.wR,'hl-badge-up')} `:'';
-          const lRankStr=u.lR?`${rb(u.lR,'hl-badge-dn')} `:'';
-          playoffPanels.push(panel(u.winner.color,`🚨 ${roundNames[roundIdx]} · Upset`,
-            `${u.winner.name} Eliminates ${lRankStr}${u.loser.name}`,
-            `${wRankStr}${u.winner.name} defeated ${lRankStr}${u.loser.name} ${u.ws}–${u.ls} — a result that will define this playoff run.`));
-        }
+      if(upsets.length) {
+        const u=upsets[0];
+        const wRankStr=u.wR?`${rb(u.wR,'hl-badge-up')} `:'';
+        const lRankStr=u.lR?`${rb(u.lR,'hl-badge-dn')} `:'';
+        playoffPanels.push(panel(u.winner.color,`🚨 ${roundNames[roundIdx]} · Upset`,
+          `${u.winner.name} Eliminates ${lRankStr}${u.loser.name}`,
+          `${wRankStr}${u.winner.name} defeated ${lRankStr}${u.loser.name} ${u.ws}–${u.ls} — a result that will define this playoff run.`));
+      }
 
-        // Best game (closest)
-        if(roundIdx >= 1) {
-          const closest = playedGames.map(g=>({g,margin:Math.abs(g.homeScore-g.awayScore),hT:SEASON.teams[g.homeIdx],aT:SEASON.teams[g.awayIdx]}))
-            .sort((a,b)=>a.margin-b.margin)[0];
-          if(closest && closest.margin <= 7) {
-            const hw=closest.g.homeScore>closest.g.awayScore;
-            const winT=hw?closest.hT:closest.aT,loseT=hw?closest.aT:closest.hT;
-            playoffPanels.push(panel(winT.color,`🎯 ${roundNames[roundIdx]} · Thriller`,
-              `${winT.name} Survives ${closest.margin===0?'in OT':`${closest.margin}-Point Battle`}`,
-              `${winT.name} edged out ${loseT.name} ${closest.g.homeScore}–${closest.g.awayScore} in one of the most dramatic games of the postseason.`));
-          }
+      if(roundIdx >= 1) {
+        const closest = playedGames.map(g=>({g,margin:Math.abs(g.homeScore-g.awayScore),hT:SEASON.teams[g.homeIdx],aT:SEASON.teams[g.awayIdx]}))
+          .sort((a,b)=>a.margin-b.margin)[0];
+        if(closest && closest.margin <= 7) {
+          const hw=closest.g.homeScore>closest.g.awayScore;
+          const winT=hw?closest.hT:closest.aT,loseT=hw?closest.aT:closest.hT;
+          playoffPanels.push(panel(winT.color,`🎯 ${roundNames[roundIdx]} · Thriller`,
+            `${winT.name} Survives ${closest.margin===0?'in OT':`${closest.margin}-Point Battle`}`,
+            `${winT.name} edged out ${loseT.name} ${closest.g.homeScore}–${closest.g.awayScore} in one of the most dramatic games of the postseason.`));
         }
       }
     });
@@ -4012,29 +3715,21 @@ function renderHeadlines(){
     SEASON.playoffRounds.forEach((rnd, roundIdx) => {
       const hasAny = rnd.games.some(g=>g.homeIdx>=0||g.awayIdx>=0);
       if(!hasAny) return;
-
       out += `<div style="font-size:.65rem;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:var(--navy);margin:12px 0 6px;">${roundNames[roundIdx]}</div>`;
       out += `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:6px;">`;
-
       rnd.games.forEach((g, gameIdx)=>{
         const tbd = g.homeIdx<0||g.awayIdx<0;
         const site = g.site ? `<div style="font-size:.58rem;color:var(--muted);margin-bottom:3px;">📍 ${g.site}</div>` : '';
         const seed1=g.seeds?.[0]??null, seed2=g.seeds?.[1]??null;
         const seedBadge=s=>(typeof s==='number')?`<span style="font-family:'Source Code Pro',monospace;font-size:.55rem;color:var(--muted);margin-right:2px;">${s}</span>`:'';
-
         if(tbd){
-          out+=`<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;text-align:center;">
-            ${site}
-            <div style="font-size:.65rem;color:var(--muted);font-style:italic;">TBD</div>
-          </div>`;
+          out+=`<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;text-align:center;">${site}<div style="font-size:.65rem;color:var(--muted);font-style:italic;">TBD</div></div>`;
           return;
         }
-
         const hT=SEASON.teams[g.homeIdx], aT=SEASON.teams[g.awayIdx];
         const hRank=getRank(hT.idx,pRankSnap), aRank=getRank(aT.idx,pRankSnap);
         const hBdg=hRank&&hRank<=25?`<span class="badge ${pRankBadgeCls}" style="font-size:.5rem;">${pRankLabel} #${hRank}</span>`:'';
         const aBdg=aRank&&aRank<=25?`<span class="badge ${pRankBadgeCls}" style="font-size:.5rem;">${pRankLabel} #${aRank}</span>`:'';
-
         if(g.played){
           const hw=g.homeScore>g.awayScore;
           const upset=upsetLevel({home:hT,away:aT,homeScore:g.homeScore,awayScore:g.awayScore,homeRating:hT.base,awayRating:aT.base},pRankSnap);
@@ -4043,14 +3738,12 @@ function renderHeadlines(){
             ${upsetBanner}
             <div style="padding:3px 8px;background:var(--surface2);border-bottom:1px solid var(--border);">${site}<span style="font-size:.58rem;color:var(--muted);">${roundNames[roundIdx]}</span></div>
             <div style="padding:7px 8px;display:flex;align-items:center;gap:5px;border-bottom:1px solid var(--border);">
-              <div style="width:7px;height:7px;border-radius:50%;background:${hT.color};flex-shrink:0;"></div>
-              ${seedBadge(seed1)}
+              <div style="width:7px;height:7px;border-radius:50%;background:${hT.color};flex-shrink:0;"></div>${seedBadge(seed1)}
               <span style="font-size:.73rem;font-weight:${hw?'700':'400'};flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${hT.name} ${hBdg}</span>
               <span style="font-size:.8rem;font-weight:${hw?'700':'400'};flex-shrink:0;">${g.homeScore}</span>
             </div>
             <div style="padding:7px 8px;display:flex;align-items:center;gap:5px;">
-              <div style="width:7px;height:7px;border-radius:50%;background:${aT.color};flex-shrink:0;"></div>
-              ${seedBadge(seed2)}
+              <div style="width:7px;height:7px;border-radius:50%;background:${aT.color};flex-shrink:0;"></div>${seedBadge(seed2)}
               <span style="font-size:.73rem;font-weight:${!hw?'700':'400'};flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${aT.name} ${aBdg}</span>
               <span style="font-size:.8rem;font-weight:${!hw?'700':'400'};flex-shrink:0;">${g.awayScore}</span>
             </div>
@@ -4061,14 +3754,12 @@ function renderHeadlines(){
           out+=`<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;cursor:pointer;" onclick="openPlayoffMatchupPreview(${roundIdx},${gameIdx})">
             <div style="padding:3px 8px;background:var(--surface2);border-bottom:1px solid var(--border);">${site}<span style="font-size:.58rem;color:var(--muted);">${roundNames[roundIdx]}</span></div>
             <div style="padding:7px 8px;display:flex;align-items:center;gap:5px;border-bottom:1px solid var(--border);">
-              <div style="width:7px;height:7px;border-radius:50%;background:${hT.color};flex-shrink:0;"></div>
-              ${seedBadge(seed1)}
+              <div style="width:7px;height:7px;border-radius:50%;background:${hT.color};flex-shrink:0;"></div>${seedBadge(seed1)}
               <span style="font-size:.73rem;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${hT.name} ${hBdg}</span>
               <span style="font-size:.73rem;color:var(--muted);flex-shrink:0;">—</span>
             </div>
             <div style="padding:7px 8px;display:flex;align-items:center;gap:5px;border-bottom:1px solid var(--border);">
-              <div style="width:7px;height:7px;border-radius:50%;background:${aT.color};flex-shrink:0;"></div>
-              ${seedBadge(seed2)}
+              <div style="width:7px;height:7px;border-radius:50%;background:${aT.color};flex-shrink:0;"></div>${seedBadge(seed2)}
               <span style="font-size:.73rem;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${aT.name} ${aBdg}</span>
               <span style="font-size:.73rem;color:var(--muted);flex-shrink:0;">—</span>
             </div>
@@ -4089,102 +3780,136 @@ function renderHeadlines(){
   }
 
   // ══════════════════════════════════════════════════════
-  // SEASON TOTALS (post-championship)
+  // BOWL SEASON SECTION (hidden once all bowls complete)
   // ══════════════════════════════════════════════════════
-  if(champCrowned) {
-    const all = allPlayedGames();
-    if(all.length) {
-      out += sectionHdr('📈 Season Totals', '14px');
+  if(inBowls && SEASON.bowlGames && SEASON.bowlGames.length) {
+    const apSnap = SEASON.apRankings[SEASON.apRankings.length - 1] || [];
+    const bowls  = SEASON.bowlGames;
+    const played = bowls.filter(g => g.played);
+    const unplayed = bowls.filter(g => !g.played);
+    const allBowlsDone = unplayed.length === 0;
 
-      // Total attendance
-      let totalAtt = 0;
-      let bestAttGame = null, bestAtt = 0;
-      all.forEach(({g, hT, aT})=>{
-        const att = g.attendance?.attendance || 0;
-        totalAtt += att;
-        if(att > bestAtt){ bestAtt = att; bestAttGame = {g,hT,aT}; }
-      });
+    // Only show this section if there are still bowls to play
+    if(!allBowlsDone) {
+      out += sectionHdr('🏈 Bowl Season · AP Poll', '14px');
 
-      // Viewership
-      let bestViewGame = null;
-      let bestViewNum = 0;
-      const viewParse = str => parseFloat(str.replace(/[MK]/,'')) * (str.endsWith('K') ? 0.001 : 1);
-      const topViewGames = [];
-      all.forEach(({g,hT,aT})=>{
-        if(!g.tv) return;
-        const v = calcViewership(g, hT, aT);
-        if(!v) return;
-        const n = viewParse(v.str);
-        topViewGames.push({g,hT,aT,v,n});
-        if(n > bestViewNum){ bestViewNum = n; bestViewGame = {g,hT,aT,v}; }
-      });
-      topViewGames.sort((a,b)=>b.n-a.n);
-      const totalViewers = topViewGames.reduce((s,x)=>s+x.n,0);
+      // Story panels
+      const bowlPanels = [];
+      if(played.length) {
+        const upsets = played.map(g => {
+          const hT=SEASON.teams[g.homeIdx], aT=SEASON.teams[g.awayIdx];
+          const hw=g.homeScore>g.awayScore;
+          const winner=hw?hT:aT, loser=hw?aT:hT;
+          const wRank=getRank(winner.idx,apSnap), lRank=getRank(loser.idx,apSnap);
+          return{g,winner,loser,wRank,lRank,ws:hw?g.homeScore:g.awayScore,ls:hw?g.awayScore:g.homeScore};
+        }).filter(x=>x.lRank&&x.lRank<=25&&(!x.wRank||x.wRank>25)).sort((a,b)=>a.lRank-b.lRank);
 
-      const statPanels = [];
+        if(upsets.length) {
+          const u=upsets[0];
+          const globalIdx=bowls.indexOf(u.g);
+          bowlPanels.push(panel(u.winner.color,'🚨 Bowl Upset',
+            `${u.winner.name} Shocks ${rb(u.lRank,'hl-badge-dn')} ${u.loser.name}`,
+            `${u.winner.name} knocked off ${u.lRank?`#${u.lRank} `:''}${u.loser.name} ${u.ws}–${u.ls} in the ${u.g.bowl}.`+
+            (upsets.length>1?` ${upsets.length} bowl upsets total.`:'')+
+            (globalIdx>=0?` <span style="font-size:.62rem;color:var(--muted2);cursor:pointer;" onclick="switchPostseasonTab('bowls');openBowlBoxScore(${globalIdx})">📊 Box score</span>`:'')));
+        }
 
-      if(bestAttGame){
-        const {g,hT,aT}=bestAttGame;
-        const apSnap=SEASON.apRankings[SEASON.apRankings.length-1]||[];
-        const hR=getRank(hT.idx,apSnap),aR=getRank(aT.idx,apSnap);
-        statPanels.push(panel('var(--navy)','🏟 Best Single-Game Attendance',
-          `${hT.name} vs ${aT.name}`,
-          `${bestAtt.toLocaleString()} fans attended this game (${g.attendance.fillPct}% capacity).`+
-          (g.bowl?` It was the ${g.bowl}.`:g.rivalryName?` A ${g.rivalryName} showdown.`:'')+
-          ` Season total attendance: <strong>${totalAtt.toLocaleString()}</strong> fans across ${all.length} games.`));
+        const notable = played.filter(g=>g.tier<=2).map(g=>{
+          const margin=Math.abs(g.homeScore-g.awayScore);
+          const hT=SEASON.teams[g.homeIdx],aT=SEASON.teams[g.awayIdx];
+          return{g,margin,hT,aT};
+        }).sort((a,b)=>a.margin-b.margin);
+        if(notable.length){
+          const best=notable[0];
+          const hw=best.g.homeScore>best.g.awayScore;
+          const winT=hw?best.hT:best.aT, loseT=hw?best.aT:best.hT;
+          const globalIdx=bowls.indexOf(best.g);
+          bowlPanels.push(panel(winT.color,'🎯 Game of the Bowls',
+            `${winT.name} Edges ${loseT.name} in ${best.g.bowl}`,
+            `${winT.name} survived ${loseT.name} ${best.g.homeScore}–${best.g.awayScore} in the closest bowl matchup so far.`+
+            (globalIdx>=0?` <span style="font-size:.62rem;color:var(--muted2);cursor:pointer;" onclick="switchPostseasonTab('bowls');openBowlBoxScore(${globalIdx})">📊 Box score</span>`:'')));
+        }
+
+        const confRecord = {};
+        played.forEach(g=>{
+          const hT=SEASON.teams[g.homeIdx],aT=SEASON.teams[g.awayIdx];
+          const hw=g.homeScore>g.awayScore;
+          const wConf=(hw?hT:aT).conf, lConf=(hw?aT:hT).conf;
+          if(!confRecord[wConf]) confRecord[wConf]={w:0,l:0};
+          if(!confRecord[lConf]) confRecord[lConf]={w:0,l:0};
+          confRecord[wConf].w++; confRecord[lConf].l++;
+        });
+        const confList=Object.entries(confRecord).filter(([,r])=>r.w+r.l>=2)
+          .sort((a,b)=>(b[1].w/(b[1].w+b[1].l))-(a[1].w/(a[1].w+a[1].l)));
+        if(confList.length>=2){
+          const best2=confList[0], worst=confList[confList.length-1];
+          bowlPanels.push(panel('var(--navy)','📊 Conference Bowl Report',
+            `${best2[0]} Leads, ${worst[0]} Struggles`,
+            `${best2[0]} is ${best2[1].w}–${best2[1].l} in bowls so far. ${worst[0]} is ${worst[1].w}–${worst[1].l}. `+
+            confList.slice(0,4).map(([c,r])=>`${c}: ${r.w}–${r.l}`).join(' · ')+'.'));
+        }
       }
 
-      if(bestViewGame){
-        const {g,hT,aT,v}=bestViewGame;
-        statPanels.push(panel('#7c3aed','📺 Most-Watched Game',
-          `${hT.name} vs ${aT.name} · ${v.str} Viewers`,
-          `${g.tv} broadcast drew ${v.str} viewers${g.bowl?` for the ${g.bowl}`:''}.`+
-          ` Season total: <strong>${totalViewers.toFixed(1)}M</strong> combined viewers across all televised games.`));
+      if(unplayed.length) {
+        const upcomingTier1 = unplayed.filter(g=>g.tier===1);
+        if(upcomingTier1.length){
+          const g=upcomingTier1[0];
+          const hT=SEASON.teams[g.homeIdx],aT=SEASON.teams[g.awayIdx];
+          const hRank=getRank(hT.idx,apSnap),aRank=getRank(aT.idx,apSnap);
+          const hWinPct=Math.round(winProbability(hT.rating,aT.rating,false)*100);
+          bowlPanels.push(panel(hT.color,'🔜 Upcoming · New Year\u2019s Six',
+            `${g.bowl}: ${hRank?`#${hRank} `:''}${hT.name} vs ${aRank?`#${aRank} `:''}${aT.name}`,
+            `${hT.name} (${hT.wins}–${hT.losses}) faces ${aT.name} (${aT.wins}–${aT.losses}) in ${g.city}. Win probability: ${hT.name} ${hWinPct}%, ${aT.name} ${100-hWinPct}%.`));
+        }
       }
 
-      // Top 5 viewership list
-      if(topViewGames.length >= 3){
-        const rows = topViewGames.slice(0,5).map((item,i)=>{
-          const tierColor=item.v.tier==='mega'?'#7c3aed':item.v.tier==='high'?'#1d4ed8':'#047857';
-          return `<div style="display:flex;align-items:center;gap:7px;padding:5px 0;border-bottom:1px solid var(--border);${i===Math.min(4,topViewGames.length-1)?'border-bottom:none;':''}">
-            <span style="font-family:'Oswald',sans-serif;font-size:.75rem;font-weight:700;color:var(--muted);min-width:14px;">${i+1}</span>
-            <div style="width:7px;height:7px;border-radius:50%;background:${item.hT.color};flex-shrink:0;"></div>
-            <div style="flex:1;min-width:0;">
-              <div style="font-size:.73rem;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${item.hT.name} vs ${item.aT.name}</div>
-              <div style="font-size:.62rem;color:var(--muted);">${item.g.tv}${item.g.bowl?' · '+item.g.bowl:''}</div>
+      if(bowlPanels.length){
+        for(let i=0;i<bowlPanels.length;i+=2){
+          if(i+1<bowlPanels.length){
+            out += `<div class="hl-panel-grid">${bowlPanels[i]}${bowlPanels[i+1]}</div>`;
+          } else {
+            out += `<div style="margin-bottom:10px;">${bowlPanels[i]}</div>`;
+          }
+        }
+      }
+
+      // Bowl game list
+      out += `<div style="font-family:'Oswald',sans-serif;font-size:.62rem;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:var(--muted);margin:10px 0 6px;">All Bowl Games</div>`;
+      const tierLabels={1:'New Year\u2019s Six',2:'Major Bowls',3:'Bowl Season'};
+      [1,2,3].forEach(tier=>{
+        const tierBowls=bowls.filter(g=>g.tier===tier);
+        if(!tierBowls.length)return;
+        out+=`<div style="font-size:.62rem;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--navy);margin:8px 0 4px;">${tierLabels[tier]}</div>`;
+        out+=`<div class="hl-scroll-box" style="max-height:180px;margin-bottom:8px;">`;
+        tierBowls.forEach(g=>{
+          const hT=SEASON.teams[g.homeIdx],aT=SEASON.teams[g.awayIdx];
+          const globalIdx=bowls.indexOf(g);
+          const hRank=getRank(hT.idx,apSnap),aRank=getRank(aT.idx,apSnap);
+          const hBdg=hRank&&hRank<=25?` <span class="hl-badge hl-badge-rank" style="font-size:.5rem;">#${hRank}</span>`:'';
+          const aBdg=aRank&&aRank<=25?` <span class="hl-badge hl-badge-rank" style="font-size:.5rem;">#${aRank}</span>`:'';
+          const hw=g.played&&g.homeScore>g.awayScore;
+          const aw=g.played&&g.awayScore>g.homeScore;
+          out+=`<div class="hl-upset-row" style="flex-direction:column;align-items:flex-start;gap:3px;cursor:${g.played?'pointer':'default'};"
+            ${g.played?`onclick="switchPostseasonTab('bowls');openBowlBoxScore(${globalIdx})"`:''}>
+            <div style="display:flex;width:100%;align-items:center;justify-content:space-between;">
+              <span style="font-family:'Oswald',sans-serif;font-size:.72rem;font-weight:700;color:var(--navy);">${g.bowl}</span>
+              <span style="font-size:.58rem;color:var(--muted);">📍 ${g.city}</span>
             </div>
-            <span style="font-family:'Source Code Pro',monospace;font-size:.72rem;font-weight:700;color:${tierColor};flex-shrink:0;">${item.v.str}</span>
-          </div>`;
-        }).join('');
-        statPanels.push(panel('#1d4ed8','📺 Top Viewership · Season',`Top ${Math.min(5,topViewGames.length)} Most-Watched Games`,rows));
-
-        // Top attendance list
-        const topAttGames = all
-          .filter(x=>x.g.attendance?.attendance)
-          .sort((a,b)=>b.g.attendance.attendance-a.g.attendance.attendance)
-          .slice(0,5);
-        if(topAttGames.length){
-          const attRows = topAttGames.map(({g,hT,aT},i)=>{
-            return `<div style="display:flex;align-items:center;gap:7px;padding:5px 0;border-bottom:1px solid var(--border);${i===topAttGames.length-1?'border-bottom:none;':''}">
-              <span style="font-family:'Oswald',sans-serif;font-size:.75rem;font-weight:700;color:var(--muted);min-width:14px;">${i+1}</span>
+            <div style="display:flex;width:100%;align-items:center;gap:6px;">
               <div style="width:7px;height:7px;border-radius:50%;background:${hT.color};flex-shrink:0;"></div>
-              <div style="flex:1;min-width:0;">
-                <div style="font-size:.73rem;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${hT.name} vs ${aT.name}</div>
-                <div style="font-size:.62rem;color:var(--muted);">${g.attendance.attendance.toLocaleString()} · ${g.attendance.fillPct}%${g.bowl?' · '+g.bowl:''}</div>
-              </div>
-            </div>`;
-          }).join('');
-          statPanels.push(panel('var(--navy)','🏟 Top Attendance · Season',`Top ${topAttGames.length} Best-Attended Games`,attRows));
-        }
-      }
-
-      for(let i=0;i<statPanels.length;i+=2){
-        if(i+1<statPanels.length){
-          out+=`<div class="hl-panel-grid">${statPanels[i]}${statPanels[i+1]}</div>`;
-        } else {
-          out+=`<div style="margin-bottom:10px;">${statPanels[i]}</div>`;
-        }
-      }
+              <span style="font-size:.73rem;color:var(--ink);font-weight:${hw?'700':'400'};">${hT.name}${hBdg}</span>
+              <span style="font-size:.75rem;font-weight:700;color:${hw?'var(--ink)':'var(--muted)'};margin-left:auto;">${g.played?g.homeScore:'—'}</span>
+            </div>
+            <div style="display:flex;width:100%;align-items:center;gap:6px;">
+              <div style="width:7px;height:7px;border-radius:50%;background:${aT.color};flex-shrink:0;"></div>
+              <span style="font-size:.73rem;color:var(--ink);font-weight:${aw?'700':'400'};">${aT.name}${aBdg}</span>
+              <span style="font-size:.75rem;font-weight:700;color:${aw?'var(--ink)':'var(--muted)'};margin-left:auto;">${g.played?g.awayScore:'—'}</span>
+            </div>
+            ${g.played?`<div style="font-size:.58rem;color:var(--muted2);">📊 tap for box score</div>`:''}
+          </div>`;
+        });
+        out+=`</div>`;
+      });
     }
   }
 
