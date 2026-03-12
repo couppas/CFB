@@ -147,16 +147,19 @@ body{background:var(--bg);color:var(--ink);font-family:'Inter',sans-serif;min-he
 .rec-txt{font-family:'Source Code Pro',monospace;font-size:.8rem;color:var(--ink2);font-weight:600;}
 .pts-cell{font-family:'Source Code Pro',monospace;font-size:.72rem;color:var(--muted);text-align:right;}
 /* ── Rankings Headlines ─────────────────────────────── */
-.hl-feed{padding:2px 0 8px;}
-.hl-dateline{font-family:'Oswald',sans-serif;font-size:.58rem;letter-spacing:5px;text-transform:uppercase;color:var(--muted);margin-bottom:14px;padding-bottom:8px;border-bottom:2px solid var(--border);}
-.hl-item{display:flex;gap:12px;padding:13px 0;border-bottom:1px solid var(--border);}
-.hl-item:last-child{border-bottom:none;}
-.hl-accent{width:3px;border-radius:2px;flex-shrink:0;align-self:stretch;min-height:40px;}
+.hl-feed{padding:2px 0 12px;}
+.hl-masthead{margin-bottom:16px;padding-bottom:12px;border-bottom:3px solid var(--ink);}
+.hl-masthead-label{font-family:'Oswald',sans-serif;font-size:.6rem;letter-spacing:6px;text-transform:uppercase;color:var(--muted);margin-bottom:3px;}
+.hl-masthead-title{font-family:'Oswald',sans-serif;font-size:1.35rem;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--ink);line-height:1.1;}
+.hl-masthead-sub{font-family:'Inter',sans-serif;font-size:.72rem;color:var(--muted);margin-top:4px;}
+.hl-item{display:flex;gap:14px;padding:16px 0;border-bottom:1px solid var(--border);}
+.hl-item:last-child{border-bottom:none;padding-bottom:4px;}
+.hl-accent{width:4px;border-radius:2px;flex-shrink:0;align-self:stretch;min-height:48px;}
 .hl-body{flex:1;min-width:0;}
-.hl-tag{font-family:'Oswald',sans-serif;font-size:.55rem;letter-spacing:4px;text-transform:uppercase;color:var(--muted);margin-bottom:4px;}
-.hl-headline{font-family:'Oswald',sans-serif;font-size:.92rem;font-weight:700;letter-spacing:.5px;color:var(--ink);line-height:1.25;margin-bottom:5px;}
-.hl-body-text{font-size:.78rem;line-height:1.6;color:var(--ink2);}
-.hl-badge{display:inline-block;font-family:'Source Code Pro',monospace;font-size:.62rem;font-weight:700;padding:1px 5px;border-radius:3px;margin:0 1px;}
+.hl-tag{font-family:'Oswald',sans-serif;font-size:.65rem;font-weight:700;letter-spacing:3px;text-transform:uppercase;margin-bottom:5px;}
+.hl-headline{font-family:'Oswald',sans-serif;font-size:1.08rem;font-weight:700;letter-spacing:.3px;color:var(--ink);line-height:1.2;margin-bottom:7px;}
+.hl-body-text{font-size:.82rem;line-height:1.65;color:var(--ink2);}
+.hl-badge{display:inline-block;font-family:'Source Code Pro',monospace;font-size:.64rem;font-weight:700;padding:2px 6px;border-radius:3px;margin:0 1px;}
 .hl-badge-up{background:#dcfce7;color:#14532d;}
 .hl-badge-dn{background:#fee2e2;color:#7f1d1d;}
 .hl-badge-new{background:#dbeafe;color:#1e3a8a;}
@@ -164,8 +167,7 @@ body{background:var(--bg);color:var(--ink);font-family:'Inter',sans-serif;min-he
 [data-theme="dark"] .hl-badge-up{background:#14532d;color:#86efac;}
 [data-theme="dark"] .hl-badge-dn{background:#7f1d1d;color:#fca5a5;}
 [data-theme="dark"] .hl-badge-new{background:#1e3a5f;color:#93c5fd;}
-.hl-intro{font-size:.82rem;line-height:1.65;color:var(--ink2);padding:10px 0 16px;border-bottom:1px solid var(--border);margin-bottom:4px;}
-.hl-source{font-family:'Oswald',sans-serif;font-size:.58rem;letter-spacing:3px;text-transform:uppercase;color:var(--muted);margin-top:6px;}
+.hl-source{font-family:'Oswald',sans-serif;font-size:.58rem;letter-spacing:3px;text-transform:uppercase;color:var(--muted);margin-top:10px;padding-top:10px;border-top:1px solid var(--border);}
 .conf-group-hdr{padding:8px 12px;background:var(--surface2);border-bottom:1px solid var(--border);border-top:1px solid var(--border);font-family:'Oswald',sans-serif;font-size:.7rem;letter-spacing:3px;text-transform:uppercase;color:var(--muted);margin-top:8px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;}
 .conf-group-hdr:first-child{margin-top:0;border-top:none;}
 .game-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px;display:grid;grid-template-columns:1fr 90px 1fr 70px;align-items:center;gap:8px;box-shadow:var(--shadow);margin-bottom:6px;}
@@ -463,7 +465,8 @@ select:focus{border-color:var(--navy);}
       </div>
     </div>
     <div class="tab-bar-wrap"><div class="tab-bar">
-      <div class="tab active" data-tab="rankings" onclick="switchTab('rankings')">📊 Rankings</div>
+      <div class="tab active" data-tab="headlines" onclick="switchTab('headlines')">📰 Headlines</div>
+      <div class="tab" data-tab="rankings" onclick="switchTab('rankings')">📊 Polls</div>
       <div class="tab" data-tab="schedule" onclick="switchTab('schedule')">📅 Schedule</div>
       <div class="tab" data-tab="conferences" onclick="switchTab('conferences')">🏫 Teams</div>
       <div class="tab" data-tab="standings" onclick="switchTab('standings')">📋 Standings</div>
@@ -471,17 +474,18 @@ select:focus{border-color:var(--navy);}
       <div class="tab" id="tab-story-btn" data-tab="story" style="display:none" onclick="switchTab('story')">📰 Season Story</div>
       <div class="tab" id="tab-playoffs-btn" style="display:none" onclick="showScreen('screen-playoffs');renderPlayoffs();switchPostseasonTab('playoffs');">🏆 Postseason</div>
     </div></div>
-    <div id="tab-rankings">
+    <div id="tab-headlines" style="display:none">
+      <div id="headlines-content"></div>
+    </div>
+    <div id="tab-rankings" style="display:none">
       <div class="poll-tab-bar">
         <div class="poll-tab active" id="ptab-ap" onclick="switchPoll('ap')">AP Poll</div>
         <div class="poll-tab" id="ptab-coaches" onclick="switchPoll('coaches')">Coaches Poll</div>
         <div class="poll-tab cfp-locked" id="ptab-cfp" onclick="switchPoll('cfp')">CFP Rankings</div>
-      <div class="poll-tab" id="ptab-headlines" onclick="switchPoll('headlines')">Headlines</div>
       </div>
       <div id="poll-content-ap"></div>
       <div id="poll-content-coaches" style="display:none"></div>
       <div id="poll-content-cfp" style="display:none"></div>
-      <div id="poll-content-headlines" style="display:none"></div>
     </div>
     <div id="tab-schedule" style="display:none">
       <!-- Sim controls -->
@@ -2789,7 +2793,7 @@ function continueSeason(slot){
   } else {
     if(SEASON.playoffField) $('tab-playoffs-btn').style.display='block';
     updateSeasonUI();
-    switchTab('rankings');
+    switchTab('headlines');
     showScreen('screen-season');
   }
 }
@@ -3045,16 +3049,17 @@ function renderAllTabs(){
     $('tab-playoffs-btn').style.display='block';
   }
   if(SEASON && SEASON.week > 1) $('tab-story-btn').style.display='block';
-  renderRankingsTab();renderSimTab();
+  renderHeadlines();renderRankingsTab();renderSimTab();
 }
 
 function switchTab(tab){
-  ['rankings','schedule','conferences','standings','statistics','story'].forEach(t=>{
+  ['headlines','rankings','schedule','conferences','standings','statistics','story'].forEach(t=>{
     $(`tab-${t}`).style.display=t===tab?'block':'none';
   });
   document.querySelectorAll('.tab[data-tab]').forEach(el=>{
     el.classList.toggle('active', el.dataset.tab===tab);
   });
+  if(tab==='headlines')renderHeadlines();
   if(tab==='schedule'){renderSchedTab(true);renderSimTab();}
   if(tab==='conferences')renderConferencesTab();
   if(tab==='standings')renderStandingsTab();
@@ -3064,11 +3069,10 @@ function switchTab(tab){
 
 function switchPoll(poll){
   activePoll=poll;
-  ['ap','coaches','cfp','headlines'].forEach(p=>{
+  ['ap','coaches','cfp'].forEach(p=>{
     $(`poll-content-${p}`).style.display=p===poll?'block':'none';
     $(`ptab-${p}`).classList.toggle('active',p===poll);
   });
-  if(poll==='headlines') renderHeadlines();
 }
 
 // ═══════════════════════════════════════════════════════
@@ -3089,8 +3093,7 @@ function renderRankingsTab(){
   renderPoll('coaches');
   if(cfpUnlocked) renderPoll('cfp');
   else $('poll-content-cfp').innerHTML=`<div style="text-align:center;padding:40px 20px;color:var(--muted);"><div style="font-size:2rem;margin-bottom:12px;">🏈</div><div style="font-family:'Oswald',sans-serif;font-size:.85rem;letter-spacing:3px;text-transform:uppercase;margin-bottom:8px;color:var(--ink);">CFP Rankings</div><div style="font-size:.82rem;font-style:italic;">The CFP Selection Committee publishes its first rankings at the start of Week 9. ${SEASON.week < 9 ? `${9 - SEASON.week} week${9-SEASON.week!==1?'s':''} to go.` : 'Sim Week 9 to unlock.'}</div></div>`;
-  // Pre-render headlines so it's ready when clicked
-  renderHeadlines();
+
 }
 
 function setActivePoll(type){
@@ -3163,7 +3166,7 @@ function renderPoll(type){
 // RANKINGS HEADLINES
 // ═══════════════════════════════════════════════════════
 function renderHeadlines(){
-  if(!SEASON){ $('poll-content-headlines').innerHTML=''; return; }
+  if(!SEASON){ $('headlines-content').innerHTML=''; return; }
 
   // Use CFP rankings once active, otherwise AP
   const cfpUnlocked = SEASON.cfpRankings && SEASON.cfpRankings.length > 0;
@@ -3193,10 +3196,11 @@ function renderHeadlines(){
 
   // Helper — build one story item
   function item(accentColor, tag, headline, body){
+    const tagColor = accentColor && accentColor !== 'var(--border)' && accentColor !== 'var(--muted)' ? accentColor : 'var(--navy)';
     return `<div class="hl-item">
       <div class="hl-accent" style="background:${accentColor};"></div>
       <div class="hl-body">
-        <div class="hl-tag">${tag}</div>
+        <div class="hl-tag" style="color:${tagColor};">${tag}</div>
         <div class="hl-headline">${headline}</div>
         <div class="hl-body-text">${body}</div>
       </div>
@@ -3245,8 +3249,8 @@ function renderHeadlines(){
         curT1.color,
         '#1 Watch · Throne Change',
         `${curT1.name} Claims the Top Spot`,
-        `${prevT1.name} has been dethroned. ${curT1.name} ${rb(1,'hl-badge-up')} moves to the top of the ${pollLabel} ` +
-        `with ${cur1[rankKey]||cur1.pts||0} points, while ${prevT1.name} falls to ${rb(cur[0+1] && cur.find(e=>e.teamIdx===prev1.teamIdx)?.rank || '?')}.`
+        `${prevT1.name} has been dethroned. ${curT1.name} ${rb(1,'hl-badge-up')} moves to the top of the ${pollLabel} with ${cur1[rankKey]||cur1.pts||0} points.` +
+        (()=>{ const nr=cur.find(e=>e.teamIdx===prev1.teamIdx); return nr&&nr.rank<=25?` ${prevT1.name} falls to ${rb(nr.rank,'hl-badge-dn')}.`:` ${prevT1.name} drops out of the top 25.`; })()
       ));
     } else {
       // #1 held — note if FPV changed significantly
@@ -3446,13 +3450,16 @@ function renderHeadlines(){
   }
 
   // ── RENDER ────────────────────────────────────────────
-  const pollSource = `<div class="hl-source">Source: ${pollLabel} · ${editionLabel}</div>`;
-  $('poll-content-headlines').innerHTML = `<div class="hl-feed">
-    <div class="hl-dateline">${pollLabel} Headlines · ${editionLabel}</div>
-    <div class="card" style="overflow:hidden;padding:0 14px;">
+  $('headlines-content').innerHTML = `<div class="hl-feed">
+    <div class="hl-masthead">
+      <div class="hl-masthead-label">Front Office · College Football</div>
+      <div class="hl-masthead-title">Rankings Report</div>
+      <div class="hl-masthead-sub">${pollLabel} · ${editionLabel}</div>
+    </div>
+    <div style="padding:0 2px;">
       ${stories.join('')}
     </div>
-    ${pollSource}
+    <div class="hl-source">${pollLabel} · ${editionLabel}</div>
   </div>`;
 }
 
