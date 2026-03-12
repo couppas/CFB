@@ -1061,7 +1061,7 @@ function initSeason() {
       statYardsAllowed: 0, statSacks: 0, statInts: 0,
       statForcedFumbles: 0, statPBU: 0, statTackles: 0,
       gamesPlayed: 0,
-      pts: Math.max(0, (rating - 60) * 12 + randNorm(0, 30)),
+      pts: 0,
       coachPts: 0,
       cfpScore: 0,
       isConfChamp: false,
@@ -1071,13 +1071,18 @@ function initSeason() {
     };
   });
 
-  // Normalize initial pts so top teams start ranked
-  teams.sort((a,b) => b.pts - a.pts);
-  teams.forEach((t, i) => {
-    t.pts = Math.max(0, 1800 - i * 14 + randNorm(0, 20));
-    t.coachPts = Math.max(0, t.pts + randNorm(0, 60));
+  // Build preseason poll points from this season's randomized ratings.
+  // Higher-rated teams get more points, but with enough variance that the
+  // top-10 order shuffles meaningfully each season while blue-bloods stay near the top.
+  // Scale: rating 99 → ~1800 pts, rating 80 → ~500 pts, rating 60 → ~0 pts
+  teams.forEach(t => {
+    const base = Math.max(0, (t.rating - 58) * 22); // rating-driven anchor
+    const noise = randNorm(0, base * 0.12);          // ~12% std dev — enough to shuffle peers
+    t.pts = Math.max(0, Math.round(base + noise));
+    t.coachPts = Math.max(0, Math.round(base + randNorm(0, base * 0.14)));
   });
-  // Re-index after sort
+  // Re-index after sort by pts
+  teams.sort((a,b) => b.pts - a.pts);
   teams.forEach((t, i) => t.idx = i);
 
   const schedule = buildSchedule(teams);
@@ -1362,10 +1367,10 @@ function calcPollScore(t, pollType) {
   const totalGames = t.wins + t.losses;
 
   // ── PRESEASON ANCHOR ─────────────────────────────────────────────────────
-  // Start from a strong preseason anchor based on program quality.
-  // This prevents G5 teams from rocketing into the top 25 on one win.
-  // Range: base 60 → anchor ~0, base 94 → anchor ~1000
-  const anchor = Math.max(0, (t.base - 60) * 28);
+  // Start from a strong preseason anchor based on THIS SEASON's randomized rating.
+  // Using t.rating (not t.base) means each new season shuffles the order realistically.
+  // Range: rating 60 → anchor ~0, rating 94 → anchor ~952
+  const anchor = Math.max(0, (t.rating - 60) * 28);
   let score = anchor;
 
   // ── RECORD ADJUSTMENT ────────────────────────────────────────────────────
