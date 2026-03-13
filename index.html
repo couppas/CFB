@@ -94,7 +94,11 @@ body{background:var(--bg);color:var(--ink);font-family:'Inter',sans-serif;min-he
 .menu-icon{font-size:1.8rem;margin-bottom:8px;}
 .menu-title{font-family:'Oswald',sans-serif;font-size:1.2rem;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:var(--navy);}
 .menu-desc{font-size:.8rem;color:var(--muted);margin-top:5px;line-height:1.5;}
-.tab-bar-wrap{overflow-x:auto;margin-bottom:16px;}
+.tab-bar-wrap{overflow-x:auto;margin-bottom:0;}
+#sim-strip{background:var(--surface);border:1px solid var(--border);border-radius:10px;margin:10px 0 14px;padding:10px 14px;box-shadow:var(--shadow);}
+#sim-strip-inner{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+#sim-strip-left{display:flex;align-items:center;gap:8px;flex-shrink:0;}
+#sim-msg{font-size:.78rem;color:var(--muted);margin-left:auto;text-align:right;}
 .tab-bar{display:flex;border-bottom:2px solid var(--border);}
 .tab{padding:9px 14px;font-family:'Oswald',sans-serif;font-size:.78rem;letter-spacing:2px;text-transform:uppercase;color:var(--ink2);cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-2px;transition:all .15s;white-space:nowrap;flex-shrink:0;}
 .tab:hover{color:var(--ink);}
@@ -179,7 +183,7 @@ body{background:var(--bg);color:var(--ink);font-family:'Inter',sans-serif;min-he
 .hl-detail-text{font-size:.93rem;line-height:1.8;color:var(--ink2);}
 .hl-detail-extra{margin-top:16px;}
 /* Section header */
-.hl-section-hdr{font-family:'Oswald',sans-serif;font-size:.68rem;font-weight:700;letter-spacing:4px;text-transform:uppercase;color:var(--navy);padding:10px 0 7px;border-bottom:2px solid var(--border);margin-bottom:10px;}
+.hl-section-hdr{font-family:'Oswald',sans-serif;font-size:.82rem;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:var(--navy);padding:12px 0 8px;border-bottom:2px solid var(--navy);margin-bottom:12px;}
 /* Scrollable upsets box */
 .hl-scroll-box{max-height:220px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;background:var(--surface);}
 .hl-scroll-box::-webkit-scrollbar{width:4px;}
@@ -519,9 +523,21 @@ select:focus{border-color:var(--navy);}
       <div class="tab" data-tab="schedule" onclick="switchTab('schedule')">📅 Schedule</div>
       <div class="tab" data-tab="conferences" onclick="switchTab('conferences')">🏫 Teams</div>
       <div class="tab" data-tab="standings" onclick="switchTab('standings')">📋 Standings</div>
-      <div class="tab" data-tab="statistics" onclick="switchTab('statistics')">📈 Statistics</div>
-      <div class="tab" id="tab-playoffs-btn" style="display:none" onclick="showScreen('screen-playoffs');renderPlayoffs();switchPostseasonTab('playoffs');">🏆 Postseason</div>
     </div></div>
+
+    <!-- ── Persistent sim strip — always visible regardless of tab ── -->
+    <div id="sim-strip">
+      <div id="sim-strip-inner">
+        <div id="sim-strip-left">
+          <button class="btn btn-primary" id="btn-sim-week" onclick="simWeekAll()">⚡ Simulate Week</button>
+          <button class="btn btn-success" id="btn-adv-week" onclick="advanceWeek()" style="display:none;">→ Next Week</button>
+          <button class="btn btn-ghost btn-sm" id="btn-replay-week" onclick="replayWeek()" style="display:none;">↺ Replay</button>
+        </div>
+        <div id="sim-msg">Ready to simulate.</div>
+      </div>
+    </div>
+    <div id="week-results" style="margin-bottom:14px;"></div>
+
     <div id="tab-headlines" style="display:none">
       <div id="headlines-content"></div>
     </div>
@@ -536,28 +552,29 @@ select:focus{border-color:var(--navy);}
       <div id="poll-content-cfp" style="display:none"></div>
     </div>
     <div id="tab-schedule" style="display:none">
-      <!-- Sim controls -->
-      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:10px 0 6px;">
-        <button class="btn btn-primary" id="btn-sim-week" onclick="simWeekAll()">⚡ Simulate Entire Week</button>
-        <button class="btn btn-success" id="btn-adv-week" onclick="advanceWeek()" style="display:none;">→ Next Week</button>
-        <button class="btn btn-ghost btn-sm" id="btn-replay-week" onclick="replayWeek()" style="display:none;">↺ Replay Week</button>
-      </div>
-      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px;">
-        <select id="play-game-sel" style="flex:1;min-width:0;"></select>
-        <button class="btn btn-outline btn-sm" onclick="playSelectedGame()">▶ Play</button>
-      </div>
-      <div style="font-size:.8rem;color:var(--muted);margin-bottom:6px;" id="sim-msg">Ready to simulate.</div>
-      <div id="week-results" style="margin-bottom:14px;"></div>
       <!-- Week schedule -->
-      <div class="week-select-bar">
+      <div class="week-select-bar" id="sched-controls">
         <select id="sched-week-sel" onchange="showSchedWeek(parseInt(this.value))"></select>
+        <select id="sched-filter-sel" onchange="showSchedWeek(parseInt($('sched-week-sel').value))" style="font-family:'Oswald',sans-serif;font-size:.75rem;letter-spacing:1px;padding:6px 10px;border:1px solid var(--border);border-radius:7px;background:var(--surface);color:var(--ink);cursor:pointer;">
+          <option value="top25">⭐ Top 25 Games</option>
+          <option value="ALL">All Games</option>
+          <option value="SEC">SEC</option>
+          <option value="B1G">Big Ten</option>
+          <option value="B12">Big 12</option>
+          <option value="ACC">ACC</option>
+          <option value="AAC">American</option>
+          <option value="MWC">Mtn West</option>
+          <option value="SBC">Sun Belt</option>
+          <option value="CUSA">C-USA</option>
+          <option value="MAC">MAC</option>
+          <option value="Ind">Independents</option>
+        </select>
         <span style="font-size:.75rem;color:var(--muted);" id="sched-status"></span>
       </div>
       <div id="sched-game-list"></div>
     </div>
     <div id="tab-conferences" style="display:none"></div>
     <div id="tab-standings" style="display:none"></div>
-    <div id="tab-statistics" style="display:none"></div>
   </div>
 
   <!-- TEAM PROFILE -->
@@ -575,29 +592,6 @@ select:focus{border-color:var(--navy);}
   </div>
 
   <!-- POSTSEASON (Playoffs + Bowls unified) -->
-  <div id="screen-playoffs" class="screen">
-    <div class="back-bar">
-      <button class="btn btn-ghost btn-sm" onclick="showScreen('screen-season');renderAllTabs();">← Season</button>
-      <span style="font-family:'Oswald',sans-serif;font-size:.95rem;letter-spacing:3px;color:var(--navy);text-transform:uppercase;">Postseason</span>
-      <div style="margin-left:auto;display:flex;gap:8px;">
-        <button class="btn btn-ghost btn-sm" onclick="promptSaveSlot()">💾 Save</button>
-        <button class="btn btn-danger btn-sm" onclick="confirmReset()">↺ Reset</button>
-      </div>
-    </div>
-    <!-- Postseason tab switcher -->
-    <div style="display:flex;border-bottom:2px solid var(--border);margin-bottom:16px;">
-      <button id="ps-tab-playoffs" onclick="switchPostseasonTab('playoffs')"
-        style="flex:1;padding:10px;font-family:'Oswald',sans-serif;font-size:.8rem;letter-spacing:2px;text-transform:uppercase;border:none;background:none;cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-2px;color:var(--ink);font-weight:700;">
-        🏆 CFP Bracket
-      </button>
-      <button id="ps-tab-bowls" onclick="switchPostseasonTab('bowls')"
-        style="flex:1;padding:10px;font-family:'Oswald',sans-serif;font-size:.8rem;letter-spacing:2px;text-transform:uppercase;border:none;background:none;cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-2px;color:var(--muted);font-weight:700;">
-        🏈 Bowl Games
-      </button>
-    </div>
-    <div id="ps-panel-playoffs"><div id="playoff-content"></div></div>
-    <div id="ps-panel-bowls" style="display:none;"><div id="bowl-content" style="padding:0 4px;"></div></div>
-  </div>
 </div>
 
 <!-- CONFIRM MODAL -->
@@ -626,6 +620,8 @@ select:focus{border-color:var(--navy);}
 <div class="save-toast" id="save-toast" style="opacity:0">✓ Saved</div>
 
 <script>
+window.onerror=function(msg,src,line,col,err){if(line===0)return false;document.body.insertAdjacentHTML('afterbegin','<div style="position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:8px;z-index:99999;font-size:11px;word-break:break-all;"><b>ERR L'+line+'</b>: '+msg+(err?' | '+(err.stack||'').replace(/\n/g,'|').slice(0,300):'')+'</div>');return false;};
+
 // ═══════════════════════════════════════════════════════
 // SAVE SYSTEM
 // ═══════════════════════════════════════════════════════
@@ -2051,6 +2047,7 @@ function calcAttendance(game, hT, aT) {
 
 function fillStr(pct){ return pct > 100 ? `${pct}% <span style="color:#16a34a;font-weight:700;">SRO</span>` : `${pct}%`; }
 function fillStrPlain(pct){ return pct > 100 ? `${pct}% SRO` : `${pct}%`; }
+function recStr(t){ return t ? '<span style="font-size:.63rem;color:var(--muted);font-weight:400;"> ('+t.wins+'-'+t.losses+')</span>' : ''; }
 
 function applyResult(game, hs, as_, hBS, aBS, weather) {
   // Idempotent: if already applied, do nothing
@@ -2130,9 +2127,8 @@ function advanceWeek() {
   }
   // If playoffs already exist, just navigate there — don't regenerate
   if(SEASON.playoffField) {
-    showScreen('screen-playoffs');
-    renderPlayoffs();
-    switchPostseasonTab('playoffs');
+    switchTab('schedule');
+    renderSchedTab(false);
     return;
   }
   SEASON.week++;
@@ -2141,8 +2137,8 @@ function advanceWeek() {
   $('week-results').innerHTML = '';
   if(SEASON.week > SEASON.totalWeeks) {
     if(SEASON.playoffField) {
-      showScreen('screen-playoffs');
-      renderPlayoffs();
+      switchTab('schedule');
+      renderSchedTab(false);
     } else {
       $('sim-msg').textContent = 'Season complete! Generating CFP bracket...';
       $('btn-sim-week').disabled = true;
@@ -2232,7 +2228,6 @@ function generatePlayoffs() {
   }
 
   SEASON.playoffField = field.map((t, i) => ({teamIdx: t.idx, seed: i+1}));
-  $('tab-playoffs-btn').style.display = 'block';
   SEASON.playoffRounds = [
     // Round 1: 5v12, 6v11, 7v10, 8v9 (seeds 1-4 have byes)
     {round:'First Round', games:[
@@ -2256,9 +2251,9 @@ function generatePlayoffs() {
     ]},
   ];
 
-  showScreen('screen-playoffs');
-  renderPlayoffs();
-  switchPostseasonTab('playoffs');
+  showScreen('screen-season');
+  switchTab('schedule');
+  renderSchedTab(false);
   generateBowls();
 }
 
@@ -2348,13 +2343,15 @@ function simBowlGame(idx) {
   // AP ranking nudge (bowl games only affect AP, and only slightly)
   applyBowlRankingNudge(game, hT, aT);
 
-  renderBowls();
+  renderSchedTab(false);
+  updateSeasonUI();
 }
 
 function simAllBowls() {
   if(!SEASON.bowlGames) return;
   SEASON.bowlGames.forEach((g, i) => { if(!g.played) simBowlGame(i); });
-  renderBowls();
+  renderSchedTab(false);
+  updateSeasonUI();
 }
 
 function applyBowlRankingNudge(game, hT, aT) {
@@ -2401,7 +2398,7 @@ function switchPostseasonTab(tab) {
     ? 'border-bottom:3px solid var(--navy);color:var(--navy);'
     : 'border-bottom:3px solid transparent;color:var(--muted);');
 
-  if(!isPlayoffs) renderBowls();
+  if(!isPlayoffs && $('bowl-content')) renderBowls();
 }
 
 function renderBowls() {
@@ -2487,14 +2484,14 @@ function renderBowls() {
         <div class="result-item-row${hw?' winner':''}" style="padding:7px 10px;">
           <div style="display:flex;align-items:center;gap:5px;min-width:0;flex:1;">
             <div class="t-dot" style="background:${hT.color};flex-shrink:0;"></div>
-            <span class="${game.played?(hw?'result-w':'result-l'):''}" style="font-size:.75rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${hT.name}${hBadge}</span>
+            <span class="${game.played?(hw?'result-w':'result-l'):''}" style="font-size:.75rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${hT.name}${game.played?'':recStr(hT)}${hBadge}</span>
           </div>
           <span class="${game.played?(hw?'result-w':'result-l'):''}" style="font-size:.8rem;flex-shrink:0;">${game.played?game.homeScore:'—'}</span>
         </div>
         <div class="result-item-row${aw?' winner':''}" style="padding:7px 10px;">
           <div style="display:flex;align-items:center;gap:5px;min-width:0;flex:1;">
             <div class="t-dot" style="background:${aT.color};flex-shrink:0;"></div>
-            <span class="${game.played?(aw?'result-w':'result-l'):''}" style="font-size:.75rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${aT.name}${aBadge}</span>
+            <span class="${game.played?(aw?'result-w':'result-l'):''}" style="font-size:.75rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${aT.name}${game.played?'':recStr(aT)}${aBadge}</span>
           </div>
           <span class="${game.played?(aw?'result-w':'result-l'):''}" style="font-size:.8rem;flex-shrink:0;">${game.played?game.awayScore:'—'}</span>
         </div>
@@ -2554,7 +2551,7 @@ function simPlayoffGame(round, gameIdx) {
     finalizeRankings();
   }
 
-  renderPlayoffs();
+  if(SEASON.playoffField && document.getElementById('tab-schedule')) renderSchedTab(false);
   if(document.getElementById('tab-headlines').style.display !== 'none') renderHeadlines();
 }
 
@@ -2589,7 +2586,18 @@ function simAllPlayoffRound(round) {
       simPlayoffGame(round, i);
     }
   });
-  renderPlayoffs();
+}
+
+function simPlayoffRound(round) {
+  const roundObj = SEASON.playoffRounds[round];
+  if(!roundObj) return;
+  roundObj.games.forEach((game, i) => {
+    if(!game.played && game.homeIdx >= 0 && game.awayIdx >= 0) {
+      simPlayoffGame(round, i);
+    }
+  });
+  renderSchedTab(false);
+  renderHeadlines();
 }
 
 // ═══════════════════════════════════════════════════════
@@ -2911,13 +2919,10 @@ function continueSeason(slot){
   if(!loadSave(slot))return;
   const inPlayoffs = SEASON.playoffField && SEASON.week > SEASON.totalWeeks;
   if(inPlayoffs){
-    $('tab-playoffs-btn').style.display='block';
     updateSeasonUI();
-    showScreen('screen-playoffs');
-    renderPlayoffs();
-    switchPostseasonTab('playoffs');
+    switchTab('schedule');
+    renderSchedTab(false);
   } else {
-    if(SEASON.playoffField) $('tab-playoffs-btn').style.display='block';
     updateSeasonUI();
     switchTab('headlines');
     showScreen('screen-season');
@@ -3155,7 +3160,6 @@ function startNewSeason(){
   G = null;
   gameContext = null;
   stopAuto();
-  $('tab-playoffs-btn').style.display = 'none';
   $('week-results').innerHTML = '';
   $('btn-adv-week').style.display = 'none';
   $('btn-replay-week').style.display = 'none';
@@ -3163,32 +3167,54 @@ function startNewSeason(){
   initSeason();updateSeasonUI();switchTab('schedule');showScreen('screen-season');
 }
 
+
+function psRoundDone(roundIdx) {
+  // A round is done only if real teams are assigned AND all those games played
+  const games = SEASON.playoffRounds[roundIdx].games.filter(g => g.homeIdx >= 0 && g.awayIdx >= 0);
+  return games.length > 0 && games.every(g => g.played);
+}
+function getPostseasonPhaseLabel(){
+  if(!SEASON.playoffField) return null;
+  const rounds = SEASON.playoffRounds;
+  const bowls  = SEASON.bowlGames || [];
+  const phase = SEASON.psPhase || 0;
+  if(phase === 4) return SEASON.champion ? '🏆 ' + SEASON.champion.name : '🏆 Champion Crowned';
+  if(phase === 3) return '🏆 National Championship';
+  if(phase === 2) return '🎯 CFP Semifinals';
+  if(phase === 1) return '⚔️ Bowl Season & Quarterfinals';
+  return '🏈 CFP First Round';
+}
+
 function updateSeasonUI(){
   const w=SEASON.week;
-  const label = w===13?'Conf Championships':w>SEASON.totalWeeks?'Playoffs':`Week ${w} of ${SEASON.totalWeeks}`;
+  let label;
+  if(SEASON.playoffField){
+    label = getPostseasonPhaseLabel() || 'Postseason';
+  } else {
+    label = w===SEASON.totalWeeks?'Conf Championships':`Week ${w} of ${SEASON.totalWeeks}`;
+  }
   $('season-week-pill').textContent=label;
   renderAllTabs();
 }
 
 function renderAllTabs(){
-  if(SEASON && SEASON.playoffField) {
-    $('tab-playoffs-btn').style.display='block';
-  }
   renderHeadlines();renderRankingsTab();renderSimTab();
 }
 
 function switchTab(tab){
-  ['headlines','rankings','schedule','conferences','standings','statistics'].forEach(t=>{
-    $(`tab-${t}`).style.display=t===tab?'block':'none';
+  // Clear week-results when leaving schedule tab
+  if(tab !== 'schedule') $('week-results').innerHTML = '';
+  ['headlines','rankings','schedule','conferences','standings'].forEach(t=>{
+    const el=$(`tab-${t}`); if(el) el.style.display=t===tab?'block':'none';
   });
   document.querySelectorAll('.tab[data-tab]').forEach(el=>{
     el.classList.toggle('active', el.dataset.tab===tab);
   });
   if(tab==='headlines')renderHeadlines();
-  if(tab==='schedule'){renderSchedTab(true);renderSimTab();}
+  if(tab==='schedule'){renderSchedTab(true);}
   if(tab==='conferences')renderConferencesTab();
   if(tab==='standings')renderStandingsTab();
-  if(tab==='statistics')renderStatisticsTab();
+  renderSimTab();
 }
 
 function switchPoll(poll){
@@ -3617,7 +3643,7 @@ function renderHeadlines(){
           const winT = hw?hT:aT;
           out += lead(winT.color, `🏈 Game of the Week · ${stored.reason}`,
             `${winT.name} ${game.homeScore}–${game.awayScore} ${hw?aT.name:hT.name}`,
-            `${hw?hBadge+' ':''}<strong>${hT.name}</strong> ${game.homeScore} &ndash; ${game.awayScore} <strong>${aT.name}</strong> ${!hw?aBadge:''}`,
+            `${hw?hBadge+' ':''}<strong>${hT.name}</strong>${recStr(hT)} ${game.homeScore} &ndash; ${game.awayScore} <strong>${aT.name}</strong>${recStr(aT)} ${!hw?aBadge:''}`,
             `<div style="display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap;">${rivalBadge}<span style="font-size:.62rem;color:var(--muted2);margin-left:auto;cursor:pointer;" onclick="openGameBoxScore(${weekIdx},${gi})">📊 View box score</span></div>`
           );
         } else {
@@ -3629,11 +3655,11 @@ function renderHeadlines(){
               <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin:8px 0;">
                 <div style="display:flex;align-items:center;gap:8px;flex:1;">
                   <div style="width:12px;height:12px;border-radius:50%;background:${hT.color};flex-shrink:0;"></div>
-                  <span style="font-family:'Oswald',sans-serif;font-weight:700;font-size:.95rem;">${hT.name} ${hBadge}</span>
+                  <span style="font-family:'Oswald',sans-serif;font-weight:700;font-size:.95rem;">${hT.name}${recStr(hT)} ${hBadge}</span>
                 </div>
                 <span style="font-family:'Oswald',sans-serif;color:var(--muted);font-size:.8rem;">vs</span>
                 <div style="display:flex;align-items:center;gap:8px;flex:1;justify-content:flex-end;">
-                  <span style="font-family:'Oswald',sans-serif;font-weight:700;font-size:.95rem;">${aT.name} ${aBadge}</span>
+                  <span style="font-family:'Oswald',sans-serif;font-weight:700;font-size:.95rem;">${aT.name}${recStr(aT)} ${aBadge}</span>
                   <div style="width:12px;height:12px;border-radius:50%;background:${aT.color};flex-shrink:0;"></div>
                 </div>
               </div>
@@ -4238,13 +4264,14 @@ function renderHeadlines(){
       if(topAttGames.length){
         const best=topAttGames[0];
         const attRows=topAttGames.slice(0,5).map(({g,hT,aT,a},i)=>{
-          const label=g.bowl?g.bowl:g.rivalryName?g.rivalryName:`${hT.name} vs ${aT.name}`;
+          const label=`${hT.name} vs ${aT.name}`;
+          const sublabel=g.bowl?g.bowl:g.rivalryName?g.rivalryName:'';
           return `<div style="display:flex;align-items:center;gap:7px;padding:5px 0;border-bottom:1px solid var(--border);${i===Math.min(4,topAttGames.length-1)?'border-bottom:none;':''}">
             <span style="font-family:'Oswald',sans-serif;font-size:.75rem;font-weight:700;color:var(--muted);min-width:14px;">${i+1}</span>
             <div style="width:7px;height:7px;border-radius:50%;background:${hT.color};flex-shrink:0;"></div>
             <div style="flex:1;min-width:0;">
               <div style="font-size:.73rem;color:var(--ink);font-weight:${i===0?700:400};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${label}</div>
-              <div style="font-size:.62rem;color:var(--muted);">${fillStrPlain(g.attendance?.fillPct)} capacity</div>
+              <div style="font-size:.62rem;color:var(--muted);">${sublabel?sublabel+' · ':''}${fillStrPlain(g.attendance?.fillPct)} capacity</div>
             </div>
             <span style="font-family:'Source Code Pro',monospace;font-size:.68rem;font-weight:${i===0?700:400};color:var(--ink2);flex-shrink:0;">${a.toLocaleString()}</span>
           </div>`;
@@ -4376,7 +4403,118 @@ function renderHeadlines(){
   }
 
   out += `<div class="hl-source">${pollLabel} · ${editionLabel}</div>`;
+
+  // ── Statistics section ──────────────────────────────────────────
+  out += buildStatsSection();
+
   $('headlines-content').innerHTML = `<div class="hl-feed">${out}</div>`;
+  renderStatsSection();
+}
+
+function buildStatsSection(){
+  // Returns a placeholder div ID; actual content rendered after innerHTML is set
+  return '<div id="hl-stats-section" style="margin-top:20px;"></div>';
+}
+
+function renderStatsSection(){
+  const el = document.getElementById('hl-stats-section');
+  if(!el || !SEASON) return;
+  const offCats = STAT_CATEGORIES.filter(c=>c.group==='Offense');
+  const defCats = STAT_CATEGORIES.filter(c=>c.group==='Defense');
+  const isOff = (window._statsGroup||'Offense') === 'Offense';
+  const cats = isOff ? offCats : defCats;
+  const activeIdx = Math.min(window._statsActiveCat||0, cats.length-1);
+  const cat = cats[activeIdx];
+  const teams = SEASON.teams;
+  const gp = t => Math.max(t.gamesPlayed, 1);
+  const sorted = [...teams].sort((a,b)=> cat.hi ? cat.num(b,gp(b))-cat.num(a,gp(a)) : cat.num(a,gp(a))-cat.num(b,gp(b)));
+  const accentColor = isOff ? 'var(--blue)' : 'var(--green)';
+  const dirLabel = cat.hi ? '▲ Most' : '▼ Fewest';
+
+  // Header
+  const hdr = document.createElement('div');
+  hdr.className = 'hl-section-hdr';
+  hdr.textContent = '📈 Team Statistics';
+  el.appendChild(hdr);
+
+  // Offense / Defense toggle
+  const toggle = document.createElement('div');
+  toggle.style.cssText = 'display:flex;gap:0;margin-bottom:12px;border:1px solid var(--border);border-radius:7px;overflow:hidden;width:fit-content;';
+  ['Offense','Defense'].forEach(grp => {
+    const btn = document.createElement('button');
+    const active = (grp==='Offense') === isOff;
+    btn.style.cssText = "padding:6px 18px;font-family:'Oswald',sans-serif;font-size:.75rem;font-weight:700;letter-spacing:1px;border:none;cursor:pointer;";
+    btn.style.background = active ? 'var(--navy)' : 'var(--surface2)';
+    btn.style.color = active ? '#fff' : 'var(--muted)';
+    btn.textContent = grp === 'Offense' ? '⚔️ OFFENSE' : '🛡️ DEFENSE';
+    btn.onclick = () => { window._statsGroup = grp; window._statsActiveCat = 0; renderHeadlines(); };
+    toggle.appendChild(btn);
+  });
+  el.appendChild(toggle);
+
+  // Category select row
+  const selRow = document.createElement('div');
+  selRow.style.cssText = 'display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap;';
+  const sel = document.createElement('select');
+  sel.style.cssText = "font-family:'Oswald',sans-serif;font-size:.8rem;font-weight:600;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--ink);cursor:pointer;min-width:180px;";
+  cats.forEach((c,i) => {
+    const opt = document.createElement('option');
+    opt.value = i; opt.textContent = c.label;
+    if(i === activeIdx) opt.selected = true;
+    sel.appendChild(opt);
+  });
+  sel.onchange = () => { window._statsActiveCat = parseInt(sel.value); renderHeadlines(); };
+  const lbl = document.createElement('span');
+  lbl.style.cssText = 'font-size:.68rem;color:var(--muted);font-style:italic;';
+  lbl.textContent = dirLabel + ' — all ' + sorted.length + ' teams';
+  selRow.appendChild(sel);
+  selRow.appendChild(lbl);
+  el.appendChild(selRow);
+
+  // Leaderboard
+  const board = document.createElement('div');
+  board.style.cssText = 'background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden;box-shadow:var(--shadow);';
+  sorted.forEach((t, i) => {
+    const g = gp(t);
+    const val = cat.val(t, g);
+    const barMax = cat.num(sorted[0], gp(sorted[0])) || 1;
+    const barPct = Math.round(Math.max(0, cat.num(t,g)) / barMax * 100);
+    const isFirst = i === 0;
+
+    const row = document.createElement('div');
+    row.style.cssText = 'padding:9px 14px;border-bottom:1px solid var(--border);' + (isFirst ? 'background:var(--surface2);' : '');
+
+    const inner = document.createElement('div');
+    inner.style.cssText = 'display:flex;align-items:center;gap:10px;';
+
+    const rank = document.createElement('span');
+    rank.style.cssText = "font-family:'Source Code Pro',monospace;font-size:.68rem;color:var(--muted);min-width:20px;text-align:right;";
+    rank.textContent = i + 1;
+
+    const dot = document.createElement('span');
+    dot.style.cssText = 'display:inline-block;width:9px;height:9px;border-radius:50%;flex-shrink:0;background:' + t.color + ';';
+
+    const name = document.createElement('span');
+    name.style.cssText = "font-size:.8rem;flex:1;cursor:pointer;font-weight:" + (isFirst?700:400) + ";color:" + (isFirst?accentColor:"var(--ink)") + ";";
+    name.textContent = t.name;
+    name.onclick = () => openTeamProfile(t.idx, 'screen-season');
+
+    const valEl = document.createElement('span');
+    valEl.style.cssText = "font-family:'Source Code Pro',monospace;font-size:.82rem;font-weight:" + (isFirst?700:500) + ";color:" + (isFirst?accentColor:"var(--ink)") + ";";
+    valEl.textContent = val;
+
+    inner.appendChild(rank); inner.appendChild(dot); inner.appendChild(name); inner.appendChild(valEl);
+
+    const barWrap = document.createElement('div');
+    barWrap.style.cssText = 'margin:4px 0 0 30px;height:3px;background:var(--border);border-radius:2px;';
+    const bar = document.createElement('div');
+    bar.style.cssText = 'height:3px;width:' + barPct + '%;background:' + (isFirst?accentColor:'var(--muted2)') + ';border-radius:2px;';
+    barWrap.appendChild(bar);
+
+    row.appendChild(inner); row.appendChild(barWrap);
+    board.appendChild(row);
+  });
+  el.appendChild(board);
 }
 
 function openPanelDetail(id){
@@ -4625,6 +4763,10 @@ function renderStatisticsTab(){
 
 function renderSchedTab(resetToCurrentWeek){
   if(!SEASON)return;
+  if(SEASON.playoffField){
+    renderPostseasonTab();
+    return;
+  }
   const sel=$('sched-week-sel');
   const oldVal=sel.value;
   sel.innerHTML='';
@@ -4640,10 +4782,395 @@ function renderSchedTab(resetToCurrentWeek){
 }
 function renderSchedWeekForCurrentTab(){renderSchedTab(false);}
 
+
+// ═══════════════════════════════════════════════════════
+// POSTSEASON SCHEDULE TAB
+// ═══════════════════════════════════════════════════════
+function renderPostseasonTab() {
+  try {
+  const container = $('tab-schedule');
+  if(!container || !SEASON || !SEASON.playoffField) return;
+
+  const sc = $('sched-controls');
+  if(sc) sc.style.display = 'none';
+
+  const field  = SEASON.playoffField;
+  const rounds = SEASON.playoffRounds;
+  const bowls  = SEASON.bowlGames || [];
+  const apSnap = SEASON.apRankings[SEASON.apRankings.length-1] || [];
+
+  // ── Phase detection ──────────────────────────────────────────────
+  const r0Done    = rounds[0].games.every(g => g.played);
+  const qfDone    = psRoundDone(1);
+  const sfDone    = psRoundDone(2);
+  const chDone    = psRoundDone(3);
+  const bowlsDone = bowls.length > 0 && bowls.every(g => g.played);
+  if(SEASON.psPhase === undefined) SEASON.psPhase = 0;
+  const phase     = SEASON.psPhase;
+
+  // ── Helpers ──────────────────────────────────────────────────────
+  function tObj(idx) { return (idx >= 0 && idx !== undefined) ? SEASON.teams[idx] : null; }
+  function getSeed(teamIdx) {
+    if(teamIdx < 0 || teamIdx === undefined) return null;
+    const e = field.find(e => e.teamIdx === teamIdx);
+    return e ? e.seed : null;
+  }
+  function seedBadge(seed) {
+    if(seed === null) return '';
+    return `<span style="display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;background:var(--surface2);border-radius:3px;font-family:'Source Code Pro',monospace;font-size:.65rem;font-weight:800;margin-right:4px;flex-shrink:0;">${seed}</span>`;
+  }
+
+  // ── Bracket SVG ──────────────────────────────────────────────────
+  function buildBracket() {
+    const BW = 102, ROW = 26, GAP = 5, BH = ROW*2+GAP;
+    const GCOL = 14; // gap between columns
+    const COLS = [];
+    for(let i=0;i<7;i++) COLS.push(i*(BW+GCOL));
+    const SVG_W = COLS[6]+BW;
+    const slot = BH+22;
+    const startY = 22;
+    const R = [0,1,2,3].map(i => startY + i*slot);
+    const SVG_H = R[3] + BH + 16;
+
+    function tRow(teamIdx, isWin, x, y, w) {
+      const t = tObj(teamIdx);
+      const c = t ? t.color : '#aaa';
+      const seed = getSeed(teamIdx);
+      const maxCh = Math.floor((w - (seed!==null?44:24)) / 6.1);
+      const raw = t ? t.name : (teamIdx===-1?'TBD':'TBD');
+      const name = raw.length > maxCh ? raw.slice(0,maxCh-1)+'…' : raw;
+      const bg = isWin ? `<rect x="${x}" y="${y}" width="${w}" height="${ROW}" fill="${c}" opacity="0.12"/>` : '';
+      const bar = `<rect x="${x}" y="${y}" width="3" height="${ROW}" fill="${isWin?c:'var(--border)'}" rx="1"/>`;
+      const sdg = seed!==null ? `<rect x="${x+6}" y="${y+4}" width="15" height="17" rx="2" fill="${c}" opacity="0.2"/>
+        <text x="${x+13.5}" y="${y+16}" text-anchor="middle" font-size="8" font-family="'Source Code Pro',monospace" fill="${c}" font-weight="800">${seed}</text>` : '';
+      const dotX = seed!==null ? x+26 : x+9;
+      const txtX = dotX+6;
+      return `${bg}${bar}${sdg}<circle cx="${dotX}" cy="${y+ROW/2}" r="3" fill="${c}"/><text x="${txtX}" y="${y+ROW/2+3.5}" font-size="9" font-family="'Oswald',sans-serif" fill="var(--ink)" font-weight="${isWin?700:400}">${name}</text>`;
+    }
+
+    function box(game, cx, y, ri, gi) {
+      const played = game && game.played;
+      const hw = played && game.homeScore > game.awayScore;
+      const aw = played && game.awayScore > game.homeScore;
+      const hIdx = game ? (game.homeIdx ?? -1) : -1;
+      const aIdx = game ? (game.awayIdx ?? -1) : -1;
+      const border = played ? '#22c55e' : 'var(--border)';
+      const click = played ? `onclick="openPlayoffBoxScore(${ri},${gi})" style="cursor:pointer;"` : '';
+      const divY = y+ROW+GAP/2;
+      const sh = played ? `<text x="${cx+BW-4}" y="${y+ROW/2+3.5}" text-anchor="end" font-size="9.5" font-family="'Source Code Pro',monospace" fill="${hw?'#22c55e':'var(--muted)'}" font-weight="${hw?700:400}">${game.homeScore}</text>` : '';
+      const sa = played ? `<text x="${cx+BW-4}" y="${y+ROW+GAP+ROW/2+3.5}" text-anchor="end" font-size="9.5" font-family="'Source Code Pro',monospace" fill="${aw?'#22c55e':'var(--muted)'}" font-weight="${aw?700:400}">${game.awayScore}</text>` : '';
+      return `<g ${click}><rect x="${cx}" y="${y}" width="${BW}" height="${BH}" rx="4" fill="var(--surface)" stroke="${border}" stroke-width="${played?1.5:1}"/><line x1="${cx}" y1="${divY}" x2="${cx+BW}" y2="${divY}" stroke="var(--border)" stroke-width="1"/>${tRow(hIdx,hw,cx,y,BW)}${tRow(aIdx,aw,cx,y+ROW+GAP,BW)}${sh}${sa}</g>`;
+    }
+
+    function arc(x1,y1,x2,y2) {
+      const mx=(x1+x2)/2;
+      return `<path d="M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}" stroke="var(--border)" stroke-width="1.2" fill="none" opacity="0.55"/>`;
+    }
+
+    const r0=rounds[0].games, r1=rounds[1].games, r2=rounds[2].games, r3=rounds[3].games;
+    // Left: R1[3]=8v9 →R[0], R1[0]=5v12 →R[2]; QF[0]@R[1], QF[1]@R[3]
+    // Right: R1[2]=7v10→R[0], R1[1]=6v11→R[2]; QF[2]@R[1], QF[3]@R[3]
+    const sfY = (R[1]+R[3])/2;
+    const chY = sfY;
+
+    let s = `<svg viewBox="0 0 ${SVG_W} ${SVG_H}" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;display:block;overflow:visible;">`;
+    // Column labels
+    const lbls = ['FIRST ROUND','QUARTERFINALS','SEMIFINALS','CHAMPIONSHIP','SEMIFINALS','QUARTERFINALS','FIRST ROUND'];
+    lbls.forEach((l,i) => {
+      s += `<text x="${COLS[i]+BW/2}" y="13" text-anchor="middle" font-size="6.5" font-family="'Oswald',sans-serif" fill="var(--muted)" letter-spacing="1.5" font-weight="700">${l}</text>`;
+    });
+    // Games
+    s += box(r0[3], COLS[0], R[0], 0, 3); // 8v9
+    s += box(r0[0], COLS[0], R[2], 0, 0); // 5v12
+    s += box(r1[0], COLS[1], R[1], 1, 0); // QF0
+    s += box(r1[1], COLS[1], R[3], 1, 1); // QF1
+    s += box(r2[0], COLS[2], sfY, 2, 0);  // SF0
+    s += box(r3[0], COLS[3], chY, 3, 0);  // Champ
+    s += box(r2[1], COLS[4], sfY, 2, 1);  // SF1
+    s += box(r1[2], COLS[5], R[1], 1, 2); // QF2
+    s += box(r1[3], COLS[5], R[3], 1, 3); // QF3
+    s += box(r0[2], COLS[6], R[0], 0, 2); // 7v10
+    s += box(r0[1], COLS[6], R[2], 0, 1); // 6v11
+    // Connectors left
+    s += arc(COLS[0]+BW, R[0]+BH/2, COLS[1], R[1]+ROW/2);
+    s += arc(COLS[0]+BW, R[2]+BH/2, COLS[1], R[3]+ROW+GAP+ROW/2);
+    s += arc(COLS[1]+BW, R[1]+ROW/2, COLS[2], sfY+ROW/2);
+    s += arc(COLS[1]+BW, R[3]+ROW+GAP+ROW/2, COLS[2], sfY+ROW+GAP+ROW/2);
+    s += arc(COLS[2]+BW, sfY+BH/2, COLS[3], chY+ROW/2);
+    // Connectors right
+    s += arc(COLS[6], R[0]+BH/2, COLS[5]+BW, R[1]+ROW/2);
+    s += arc(COLS[6], R[2]+BH/2, COLS[5]+BW, R[3]+ROW+GAP+ROW/2);
+    s += arc(COLS[5], R[1]+ROW/2, COLS[4]+BW, sfY+ROW/2);
+    s += arc(COLS[5], R[3]+ROW+GAP+ROW/2, COLS[4]+BW, sfY+ROW+GAP+ROW/2);
+    s += arc(COLS[4], sfY+BH/2, COLS[3]+BW, chY+ROW+GAP+ROW/2);
+    // Champ gold glow
+    if(chDone) s += `<rect x="${COLS[3]-2}" y="${chY-2}" width="${BW+4}" height="${BH+4}" rx="6" fill="none" stroke="#f59e0b" stroke-width="2" opacity="0.8"/>`;
+    s += `</svg>`;
+    return s;
+  }
+
+  // ── Game card builders ───────────────────────────────────────────
+  function gameCard(opts) {
+    // opts: {hT, aT, played, hScore, aScore, site, bowl, city, tier, isCFP,
+    //        roundIdx, gameIdx, globalBowlIdx, upsetObj, att, tv, kickoff, weather, winProb}
+    const {hT,aT,played,hScore,aScore,site,bowl,city,isCFP,roundIdx,gameIdx,globalBowlIdx,att,tv,kickoff,weather,winProb} = opts;
+    const hw = played && hScore > aScore;
+    const aw = played && aScore > hScore;
+    const hSeed = opts.hSeed ?? null;
+    const aSeed = opts.aSeed ?? null;
+    const cfpBorder = isCFP ? 'border-left:3px solid #f59e0b;' : '';
+    const cfpTag = isCFP ? `<span style="font-family:'Oswald',sans-serif;font-size:.6rem;font-weight:700;letter-spacing:2px;color:#f59e0b;text-transform:uppercase;">CFP</span>` : '';
+    const isChamp = roundIdx === 3;
+    const champBorder = isChamp ? 'border:2px solid #f59e0b;' : '';
+
+    const clickAttr = played
+      ? (globalBowlIdx !== undefined
+          ? `onclick="openBowlBoxScore(${globalBowlIdx})" style="cursor:pointer;"`
+          : `onclick="openPlayoffBoxScore(${roundIdx},${gameIdx})" style="cursor:pointer;"`)
+      : '';
+
+    // Header (bowl name + city, or site for CFP)
+    let header = '';
+    if(bowl) {
+      header = `<div style="padding:5px 10px;background:var(--surface2);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;">
+        <div>
+          <div style="font-family:'Oswald',sans-serif;font-size:.72rem;font-weight:700;color:var(--navy);">${bowl}${isCFP?' <span style="font-size:.6rem;color:#f59e0b;letter-spacing:1px;">· CFP QUARTERFINAL</span>':''}</div>
+          <div style="font-size:.6rem;color:var(--muted);">📍 ${city}</div>
+        </div>${isCFP?'<span style="font-size:1rem;">🏆</span>':''}
+      </div>`;
+    } else if(site) {
+      header = `<div style="padding:5px 10px;background:${isChamp?'linear-gradient(90deg,rgba(245,158,11,.15),transparent)':'var(--surface2)'};border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;">
+        <div style="font-size:.62rem;color:var(--muted2);">📍 ${site}</div>
+        ${isChamp?'<span style="font-size:1rem;">🏆</span>':''}
+      </div>`;
+    }
+
+    // Upset banner
+    let upsetBanner = '';
+    if(played && opts.upsetObj) {
+      const u = opts.upsetObj;
+      upsetBanner = `<div style="padding:3px 10px;background:${u.bg};border-bottom:1px solid ${u.border};"><span style="font-size:.6rem;font-weight:800;color:${u.text};letter-spacing:1.5px;">${u.label}</span></div>`;
+    }
+
+    // Win prob bar
+    const hWP = winProb ?? 50, aWP = 100-hWP;
+    const probBar = !played && hT && aT ? `<div style="padding:5px 10px;border-top:1px solid var(--border);background:var(--surface2);">
+      <div style="display:flex;justify-content:space-between;font-family:'Source Code Pro',monospace;font-size:.62rem;margin-bottom:2px;">
+        <span style="color:${hT.color};font-weight:700;">${hWP}%</span>
+        <span style="font-size:.58rem;color:var(--muted);">Win Prob</span>
+        <span style="color:${aT.color};font-weight:700;">${aWP}%</span>
+      </div>
+      <div style="display:flex;height:4px;border-radius:2px;overflow:hidden;">
+        <div style="width:${hWP}%;background:${hT.color};"></div>
+        <div style="width:${aWP}%;background:${aT.color};"></div>
+      </div></div>` : '';
+
+    // Sim button
+    const simCall = globalBowlIdx!==undefined ? 'simBowlGame('+globalBowlIdx+');' : 'simPlayoffGame('+roundIdx+','+gameIdx+');';
+    const simBtn = !played && hT && aT ? '<div style="padding:7px 10px;border-top:1px solid var(--border);"><button class="btn btn-primary btn-sm" style="width:100%" onclick="event.stopPropagation();'+simCall+'renderSchedTab(false);">⚡ Simulate</button></div>' : '';
+
+    const attStr = att && att.attendance ? `<span style="font-size:.6rem;color:var(--muted2);">🏟 ${att.attendance.toLocaleString()} (${fillStrPlain(att.fillPct)})</span>` : '';
+    const wx = played && weather ? ({clear:'☀️',wind:'💨',rain:'🌧️',snow:'❄️'}[weather]||'') : '';
+    const views = played && hT && aT ? calcViewership({played,tv,homeScore:hScore,awayScore:aScore,weather}, hT, aT) : null;
+    const viewStr = views ? `<span style="font-size:.6rem;font-weight:600;color:var(--muted2);">${views.str}</span>` : '';
+
+    return `<div style="background:var(--surface);border:1px solid var(--border);${cfpBorder}${champBorder}border-radius:8px;overflow:hidden;box-shadow:var(--shadow);" ${clickAttr}>
+      ${header}${upsetBanner}
+      <div class="result-item-row${hw?' winner':''}" style="padding:7px 10px;">
+        <div style="display:flex;align-items:center;gap:5px;min-width:0;flex:1;">
+          ${hT?`<div class="t-dot" style="background:${hT.color};flex-shrink:0;"></div>`:''}
+          <span class="${played?(hw?'result-w':'result-l'):''}" style="font-size:.75rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${seedBadge(hSeed)}${hT?hT.name:'TBD'}${!played?recStr(hT):''}</span>
+        </div>
+        <span class="${played?(hw?'result-w':'result-l'):''}" style="font-size:.8rem;flex-shrink:0;">${played?hScore:'—'}</span>
+      </div>
+      <div class="result-item-row${aw?' winner':''}" style="padding:7px 10px;">
+        <div style="display:flex;align-items:center;gap:5px;min-width:0;flex:1;">
+          ${aT?`<div class="t-dot" style="background:${aT.color};flex-shrink:0;"></div>`:''}
+          <span class="${played?(aw?'result-w':'result-l'):''}" style="font-size:.75rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${seedBadge(aSeed)}${aT?aT.name:'TBD'}${!played?recStr(aT):''}
+        </div>
+        <span class="${played?(aw?'result-w':'result-l'):''}" style="font-size:.8rem;flex-shrink:0;">${played?aScore:'—'}</span>
+      </div>
+      <div class="result-item-footer" style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;">
+        ${wx?`<span style="font-size:.8rem;">${wx}</span>`:''}${attStr}${viewStr}
+        ${tv?`<span style="margin-left:auto;">${tvBadgeHTML(tv,played?null:kickoff)}</span>`:''}
+        ${played?('<span style="font-size:.6rem;color:var(--muted2);"'+(tv?'':' style="margin-left:auto;"')+'>📊</span>'):''}
+      </div>
+      ${probBar}${simBtn}
+    </div>`;
+  }
+
+  function prepGame(game, hT, aT) {
+    // Ensure TV + attendance assigned
+    if(hT && aT) {
+      if(!game.tv){ const tv=assignTV(game,hT,aT,apSnap); game.tv=tv.tv; game.kickoff=tv.kickoff; }
+      if(!game.attendance){
+        const avgCap=Math.round((hT.capacity+aT.capacity)/2);
+        const fill=Math.min(1,0.90+(Math.random()-.5)*.08);
+        game.attendance={attendance:Math.round(avgCap*fill),capacity:avgCap,fillPct:Math.round(fill*100)};
+      }
+    }
+  }
+
+  function cfpCard(game, ri, gi) {
+    const hT=tObj(game.homeIdx), aT=tObj(game.awayIdx);
+    prepGame(game, hT, aT);
+    const upset = game.played && hT && aT ? upsetLevel({home:hT,away:aT,homeScore:game.homeScore,awayScore:game.awayScore,homeRating:hT.base,awayRating:aT.base}, apSnap) : null;
+    return gameCard({
+      hT, aT, played:game.played,
+      hScore:game.homeScore, aScore:game.awayScore,
+      site: game.site, isCFP:true,
+      hSeed:getSeed(game.homeIdx), aSeed:getSeed(game.awayIdx),
+      roundIdx:ri, gameIdx:gi,
+      upsetObj:upset,
+      att:game.attendance, tv:game.tv, kickoff:game.kickoff, weather:game.weather,
+      winProb: hT&&aT ? Math.round(winProbability(hT.rating,aT.rating,false)*100) : 50,
+    });
+  }
+
+  function bowlGameCard(game) {
+    const gi = bowls.indexOf(game);
+    const hT=tObj(game.homeIdx), aT=tObj(game.awayIdx);
+    prepGame(game, hT, aT);
+    const upset = game.played && hT && aT ? upsetLevel({home:hT,away:aT,homeScore:game.homeScore,awayScore:game.awayScore,homeRating:hT.base,awayRating:aT.base}, apSnap) : null;
+    return gameCard({
+      hT, aT, played:game.played,
+      hScore:game.homeScore, aScore:game.awayScore,
+      bowl:game.bowl, city:game.city, isCFP:false,
+      globalBowlIdx:gi,
+      upsetObj:upset,
+      att:game.attendance, tv:game.tv, kickoff:game.kickoff, weather:game.weather,
+      winProb: hT&&aT ? Math.round(winProbability(hT.rating,aT.rating,false)*100) : 50,
+    });
+  }
+
+  // ── Phase section header ─────────────────────────────────────────
+  function phaseHeader(icon, title, subtitle, isActive, isDone) {
+    const color = isActive ? 'var(--navy)' : (isDone ? 'var(--green)' : 'var(--muted)');
+    const badge = isDone
+      ? `<span style="font-size:.65rem;font-weight:600;color:var(--green);margin-left:8px;">✓ Complete</span>`
+      : (isActive ? `<span style="font-size:.65rem;font-weight:600;color:#f59e0b;margin-left:8px;">● In Progress</span>` : '');
+    return `<div style="font-family:'Oswald',sans-serif;font-size:.85rem;letter-spacing:2.5px;text-transform:uppercase;color:${color};margin:18px 0 10px;padding-bottom:7px;border-bottom:2px solid ${isDone?'var(--green)':isActive?'#f59e0b':'var(--border)'};">
+      ${icon} ${title}${badge}
+      ${subtitle?`<div style="font-size:.62rem;font-weight:400;letter-spacing:1px;color:var(--muted);margin-top:2px;">${subtitle}</div>`:''}
+    </div>`;
+  }
+
+  // ── Build HTML ───────────────────────────────────────────────────
+  let html = '';
+
+  // Postseason hero header
+  html += `<div style="margin:-12px -12px 16px;padding:18px 16px 14px;background:linear-gradient(135deg,#0a0e19 0%,#1a1f3a 60%,#2d1a00 100%);color:#fff;position:relative;overflow:hidden;">
+    <div style="position:absolute;inset:0;background:radial-gradient(ellipse at 70% 50%,rgba(245,158,11,.18) 0%,transparent 70%);pointer-events:none;"></div>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px;position:relative;">
+      <span style="font-size:1.4rem;">🏆</span>
+      <div>
+        <div style="font-family:'Oswald',sans-serif;font-size:1.1rem;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:#f59e0b;">CFP Postseason</div>
+        <div style="font-size:.72rem;color:rgba(255,255,255,.6);letter-spacing:1px;">College Football Playoff</div>
+      </div>
+      ${SEASON.champion?`<div style="margin-left:auto;text-align:right;"><div style="font-family:'Oswald',sans-serif;font-size:.65rem;letter-spacing:2px;color:#f59e0b;text-transform:uppercase;">Champion</div><div style="font-family:'Oswald',sans-serif;font-size:.95rem;font-weight:700;color:#fff;">${SEASON.champion.name}</div></div>`:''}
+    </div>
+  </div>`;
+
+  // Bracket
+  html += `<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px 8px;margin-bottom:4px;overflow-x:auto;">
+    <div style="min-width:700px;">${buildBracket()}</div>
+  </div>`;
+
+  // Championship banner — shown right after bracket when champ is crowned
+  if(SEASON.champion && chDone) {
+    const ch = SEASON.champion;
+    const chRecord = ch.wins + '–' + ch.losses;
+    const c2 = ch.color2 && ch.color2 !== '#FFFFFF' ? ch.color2 : '#000000';
+    html += `<div style="margin:0 0 12px;border-radius:10px;overflow:hidden;background:linear-gradient(135deg,${c2} 0%,${ch.color} 35%,${ch.color} 65%,${c2} 100%);box-shadow:0 4px 20px ${ch.color}88;">
+      <div style="padding:16px 20px;display:flex;align-items:center;gap:14px;position:relative;overflow:hidden;">
+        <div style="position:absolute;inset:0;background:radial-gradient(ellipse at 30% 50%,rgba(255,255,255,.12) 0%,transparent 65%);pointer-events:none;"></div>
+        <div style="font-size:2.4rem;filter:drop-shadow(0 2px 4px rgba(0,0,0,.4));">🏆</div>
+        <div style="position:relative;">
+          <div style="font-family:'Oswald',sans-serif;font-size:.65rem;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:rgba(255,255,255,.8);margin-bottom:2px;">National Champions</div>
+          <div style="font-family:'Oswald',sans-serif;font-size:1.6rem;font-weight:800;color:#fff;line-height:1;text-shadow:0 2px 6px rgba(0,0,0,.5);">${ch.name}</div>
+          <div style="font-size:.72rem;color:rgba(255,255,255,.75);margin-top:4px;">${chRecord} · CFP Champions</div>
+        </div>
+      </div>
+    </div>`;
+  }
+
+  // Phases render in REVERSE — active phase at top, history below
+
+  // ── PHASE 3: National Championship ──────────────────────────────
+  if(phase >= 3) {
+    html += phaseHeader('🏆','National Championship','Mid-January · Mercedes-Benz Stadium — Atlanta, GA', phase===3, chDone);
+    html += `<div style="max-width:360px;margin:0 auto 8px;">`;
+    html += cfpCard(rounds[3].games[0], 3, 0);
+    html += `</div>`;
+  }
+
+  // ── PHASE 2: Semifinals ──────────────────────────────────────────
+  if(phase >= 2) {
+    html += phaseHeader('🎯','CFP Semifinals','Early January', phase===2, sfDone);
+    html += `<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:8px;">`;
+    rounds[2].games.forEach((g,gi) => { html += cfpCard(g, 2, gi); });
+    html += `</div>`;
+    if(phase === 2 && sfDone) {
+      html += `<div style="text-align:center;padding:10px 0 4px;">
+        <button class="btn btn-primary" onclick="postseasonAdvancePhase()" style="letter-spacing:2px;">→ Advance to National Championship</button>
+      </div>`;
+    }
+  }
+
+  // ── PHASE 1: Bowl Season + Quarterfinals ─────────────────────────
+  if(phase >= 1) {
+    html += phaseHeader('⚔️','Bowl Season & Quarterfinals',"New Year's Six bowls are CFP Quarterfinals · Late December–Early January", phase===1, qfDone && bowlsDone);
+
+    html += `<div style="font-family:'Oswald',sans-serif;font-size:.68rem;letter-spacing:2px;text-transform:uppercase;color:#f59e0b;margin:8px 0 6px;">🏆 CFP Quarterfinals — New Year's Six</div>`;
+    html += `<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">`;
+    rounds[1].games.forEach((g,gi) => { html += cfpCard(g, 1, gi); });
+    html += `</div>`;
+
+    const tierLabels = {1:"Other New Year's Six Bowls", 2:'Major Bowls', 3:'Bowl Season'};
+    [1,2,3].forEach(tier => {
+      const tGames = bowls.filter(g => g.tier === tier);
+      if(!tGames.length) return;
+      html += `<div style="font-family:'Oswald',sans-serif;font-size:.68rem;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin:10px 0 6px;">${tierLabels[tier]}</div>`;
+      html += `<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:8px;">`;
+      tGames.forEach(g => { html += bowlGameCard(g); });
+      html += `</div>`;
+    });
+
+    if(phase === 1 && qfDone && bowlsDone) {
+      html += `<div style="text-align:center;padding:10px 0 4px;">
+        <button class="btn btn-primary" onclick="postseasonAdvancePhase()" style="letter-spacing:2px;">→ Advance to Semifinals</button>
+      </div>`;
+    }
+  }
+
+  // ── PHASE 0: First Round (always shown) ──────────────────────────
+  html += phaseHeader('🏈','CFP First Round','Campus sites · Mid-December', phase===0, r0Done);
+  html += `<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:8px;">`;
+  rounds[0].games.forEach((g,gi) => { html += cfpCard(g, 0, gi); });
+  html += `</div>`;
+  if(r0Done && phase === 0) {
+    html += `<div style="text-align:center;padding:10px 0 4px;">
+      <button class="btn btn-primary" onclick="postseasonAdvancePhase()" style="letter-spacing:2px;">→ Advance to Bowl Season & Quarterfinals</button>
+    </div>`;
+  }
+  container.innerHTML = html;
+  } catch(e) {
+    document.body.insertAdjacentHTML('afterbegin','<div style="position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:8px;z-index:99999;font-size:11px;word-break:break-all;"><b>renderPostseasonTab</b>: '+e.message+' | '+(e.stack||'').replace(/\n/g,'|').slice(0,400)+'</div>');
+  }
+}
+
+function postseasonAdvancePhase() {
+  if(SEASON.psPhase === undefined) SEASON.psPhase = 0;
+  SEASON.psPhase = Math.min(SEASON.psPhase + 1, 4);
+  renderSchedTab(false);
+  updateSeasonUI();
+}
+
 function showSchedWeek(w){
   if(!SEASON||w<1||w>SEASON.totalWeeks)return;
   if(w===SEASON.totalWeeks){ setupConfChampGames(); }
   const games=SEASON.schedule[w-1];
+  const filter = ($('sched-filter-sel') && $('sched-filter-sel').value) || 'top25';
 
   // Pre-assign TV for any unplayed games that don't have it yet
   const apSnap = SEASON.apRankings[SEASON.apRankings.length-1] || [];
@@ -4666,19 +5193,6 @@ function showSchedWeek(w){
     ? SEASON.cfpRankings[SEASON.cfpRankings.length-1]
     : SEASON.apRankings[SEASON.apRankings.length-1];
 
-  // Group by conference
-  const confGroups = {};
-  const confOrder = ['SEC','B1G','B12','ACC','AAC','MWC','SBC','CUSA','MAC','Ind'];
-
-  games.forEach((game,gi)=>{
-    if(game.homeIdx<0) return;
-    // For the current week, only show unplayed games — results are shown above in week-results
-    if(w === SEASON.week && game.played) return;
-    const hT=SEASON.teams[game.homeIdx], aT=SEASON.teams[game.awayIdx];
-    const conf = game.isConfChamp ? `${hT.conf} Championship` : (game.isConfGame ? hT.conf : 'Non-Conference');
-    if(!confGroups[conf]) confGroups[conf]=[]; confGroups[conf].push({game,gi,hT,aT});
-  });
-
   function getRankBadge(tIdx) {
     const r=getRank(tIdx,rankSnap);
     if(!r||r>25)return '';
@@ -4687,35 +5201,63 @@ function showSchedWeek(w){
     return `<span class="badge ${cls}">${lbl} #${r}</span>`;
   }
 
-  let html = '';
+  // Build filtered list (preserve original gi for box score lookups)
+  let filtered = games
+    .map((game, gi) => ({game, gi}))
+    .filter(({game}) => game.homeIdx >= 0);
 
-  // ── Game of the Week — shown in week-results via renderGotwInResults()
-  // Lock in selection now if not yet stored
+
+  if(filter === 'top25') {
+    filtered = filtered.filter(({game}) => {
+      const hR = getRank(game.homeIdx, rankSnap);
+      const aR = getRank(game.awayIdx, rankSnap);
+      return (hR && hR <= 25) || (aR && aR <= 25);
+    });
+    // Sort: ranked vs ranked first, then by highest rank involved
+    filtered.sort(({game:a},{game:b}) => {
+      const aH=getRank(a.homeIdx,rankSnap)||99, aA=getRank(a.awayIdx,rankSnap)||99;
+      const bH=getRank(b.homeIdx,rankSnap)||99, bA=getRank(b.awayIdx,rankSnap)||99;
+      const aBoth = aH<=25&&aA<=25, bBoth = bH<=25&&bA<=25;
+      if(aBoth && !bBoth) return -1;
+      if(!aBoth && bBoth) return 1;
+      return Math.min(aH,aA) - Math.min(bH,bA);
+    });
+  } else if(filter !== 'ALL') {
+    filtered = filtered.filter(({game}) => {
+      const hT = SEASON.teams[game.homeIdx];
+      const aT = SEASON.teams[game.awayIdx];
+      return hT.conf === filter || aT.conf === filter;
+    });
+  }
+
+  // Lock in Game of the Week
   if(w === SEASON.week) {
     if(!SEASON.gotw) SEASON.gotw = {};
     if(!SEASON.gotw[w]) {
       const gotwPick = pickGameOfWeek(games, rankSnap, w);
       if(gotwPick) SEASON.gotw[w] = { gameIdx: gotwPick.gi, reason: gotwPick.reason };
     }
-    // If week-results is empty (browsing before sim), show gotw card there directly
     if($('week-results') && !$('week-results').children.length) {
       renderGotwInResults(w);
     }
   }
 
-  // Sort conf groups
-  const groupKeys = [...confOrder.map(c=>c), ...Object.keys(confGroups).filter(k=>!confOrder.includes(k))]
-    .filter(k=>confGroups[k]);
+  let html = '';
 
-  groupKeys.forEach(conf=>{
-    const group=confGroups[conf];
-    if(!group)return;
-    html+=`<div class="conf-group-hdr" onclick="toggleConfGroup('cg-${conf.replace(/\s/g,'_')}')">${CONF_INFO[conf]?.label||conf} <span style="font-size:.65rem;">${group.length} game${group.length!==1?'s':''}</span></div>`;
-    html+=`<div id="cg-${conf.replace(/\s/g,'_')}">`;
-    group.forEach(({game,gi,hT,aT})=>{
-      const played=game.played;
-      const hw=played&&game.homeScore>game.awayScore;
-      const aw=played&&game.awayScore>game.homeScore;
+  if(filtered.length === 0) {
+    const filterLabel = filter==='top25' ? 'Top 25' : filter==='ALL' ? '' : (CONF_INFO[filter]?.label||filter);
+    html = `<div style="padding:24px 0;text-align:center;font-size:.82rem;color:var(--muted);">No ${filterLabel} games this week.</div>`;
+  } else {
+    const filterLabel = filter==='top25' ? '⭐ Top 25 Games'
+      : filter==='ALL' ? 'All Games'
+      : (CONF_INFO[filter]?.label||filter);
+    html += `<div style="font-size:.62rem;color:var(--muted);letter-spacing:2px;text-transform:uppercase;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--border);">${filterLabel} &middot; ${filtered.length} game${filtered.length!==1?'s':''}</div>`;
+
+    filtered.forEach(({game, gi}) => {
+      const hT = SEASON.teams[game.homeIdx], aT = SEASON.teams[game.awayIdx];
+      const played = game.played;
+      const hw = played && game.homeScore > game.awayScore;
+      const aw = played && game.awayScore > game.homeScore;
       const weatherEmoji = {clear:'☀️',wind:'💨',rain:'🌧️',snow:'❄️'};
       const wx = played && game.weather ? weatherEmoji[game.weather]||'' : '';
       const rivalryBadge = game.rivalryName ? `<span style="font-size:.6rem;background:#fef3c7;color:#92400e;border:1px solid #fcd34d;padding:1px 5px;border-radius:4px;font-weight:600;">🏆 ${game.rivalryName}</span>` : '';
@@ -4725,9 +5267,9 @@ function showSchedWeek(w){
       if(played){
         const att = game.attendance || {attendance:0, fillPct:0};
         const attHTML = `<span style="font-size:.62rem;color:var(--muted2);">🏟 ${att.attendance ? att.attendance.toLocaleString() + ' (' + att.fillPct + '%)' : '—'}</span>`;
-        const apSnap = SEASON.apRankings.length >= 2 ? SEASON.apRankings[SEASON.apRankings.length-2] : rankSnap;
-        const fakeResult = {home:hT, away:aT, homeScore:game.homeScore, awayScore:game.awayScore, homeRating:hT.base, awayRating:aT.base, apSnap};
-        const upset = upsetLevel(fakeResult, apSnap);
+        const apSnap2 = SEASON.apRankings.length >= 2 ? SEASON.apRankings[SEASON.apRankings.length-2] : rankSnap;
+        const fakeResult = {home:hT, away:aT, homeScore:game.homeScore, awayScore:game.awayScore, homeRating:hT.base, awayRating:aT.base, apSnap:apSnap2};
+        const upset = upsetLevel(fakeResult, apSnap2);
         const upsetBanner = upset ? `<div style="padding:4px 12px;background:${upset.bg};border-bottom:1px solid ${upset.border};display:flex;align-items:center;gap:6px;"><span style="font-size:.65rem;font-weight:800;color:${upset.text};letter-spacing:1.5px;">${upset.label}</span></div>` : '';
         html+=`<div class="result-item" onclick="openGameBoxScore(${w-1},${gi})" style="cursor:pointer;${upset?`border-color:${upset.border};`:''}">
           ${upsetBanner}
@@ -4748,27 +5290,30 @@ function showSchedWeek(w){
           <div class="result-item-footer" style="display:flex;align-items:center;gap:6px;">${rivalryBadge}${wx?`<span style="font-size:.8rem;">${wx}</span>`:''}${attHTML}${game.tv?`<span style="margin-left:4px;">${tvBadgeHTML(game.tv,null)}</span>`:''}<span style="font-size:.62rem;color:var(--muted2);margin-left:auto;">📊</span></div>
         </div>`;
       } else {
+        const isCurrentWeek = (w === SEASON.week);
+        const playBtn = isCurrentWeek
+          ? `<button class="btn btn-primary btn-sm" style="margin-left:auto;flex-shrink:0;font-size:.7rem;padding:4px 10px;" onclick="event.stopPropagation();playGameInline(${w-1},${gi})">▶ Play</button>`
+          : '';
         html+=`<div class="result-item" onclick="openMatchupPreview(${w-1},${gi})" style="cursor:pointer;">
           <div class="result-item-row">
             <div style="display:flex;align-items:center;gap:6px;min-width:0;flex:1;">
               <div class="t-dot" style="background:${hT.color};flex-shrink:0;"></div>
-              <span style="color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${hT.name}${hBadge?` ${hBadge}`:''}</span>
+              <span style="color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${hT.name}${recStr(hT)}${hBadge?` ${hBadge}`:''}</span>
             </div>
             <span style="font-size:.72rem;color:var(--muted);flex-shrink:0;">Home</span>
           </div>
           <div class="result-item-row">
             <div style="display:flex;align-items:center;gap:6px;min-width:0;flex:1;">
               <div class="t-dot" style="background:${aT.color};flex-shrink:0;"></div>
-              <span style="color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${aT.name}${aBadge?` ${aBadge}`:''}</span>
+              <span style="color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${aT.name}${recStr(aT)}${aBadge?` ${aBadge}`:''}</span>
             </div>
             <span style="font-size:.72rem;color:var(--muted);flex-shrink:0;">Away</span>
           </div>
-          <div class="result-item-footer" style="display:flex;align-items:center;gap:6px;">${rivalryBadge}${game.tv?tvBadgeHTML(game.tv,game.kickoff):''}${!rivalryBadge&&!game.tv?`<span style="font-size:.62rem;color:var(--muted2);">📍 ${hT.city||''}</span>`:''}</div>
+          <div class="result-item-footer" style="display:flex;align-items:center;gap:6px;">${rivalryBadge}${game.tv?tvBadgeHTML(game.tv,game.kickoff):''}${!rivalryBadge&&!game.tv?`<span style="font-size:.62rem;color:var(--muted2);">📍 ${hT.city||''}</span>`:''}${playBtn}</div>
         </div>`;
       }
     });
-    html+='</div>';
-  });
+  }
 
   $('sched-game-list').innerHTML = html;
 }
@@ -4851,16 +5396,84 @@ function renderSimTab(){
   if(!SEASON)return;
   populatePlayGameSel();
   const w=SEASON.week;
-  // Playoffs already generated — lock all regular season sim controls
-  if(SEASON.playoffField){
-    $('btn-sim-week').disabled=true;
-    $('btn-sim-week').textContent='⚡ Simulate Week';
+  // Postseason mode — sim strip drives each phase
+  if(SEASON.playoffField){ try {
     $('btn-replay-week').style.display='none';
-    $('sim-msg').textContent='Season complete!';
-    $('btn-adv-week').style.display='inline-flex';
-    $('btn-adv-week').textContent='🏆 Go to Playoffs';
-    $('btn-adv-week').onclick=()=>{showScreen('screen-playoffs');renderPlayoffs();switchPostseasonTab('playoffs');};
+    $('btn-adv-week').style.display='none';
+    const rounds = SEASON.playoffRounds;
+    const bowls  = SEASON.bowlGames || [];
+    const r0Done    = rounds[0].games.every(g=>g.played);
+    const qfDone    = psRoundDone(1);
+    const sfDone    = psRoundDone(2);
+    const chDone    = psRoundDone(3);
+    const bowlsDone = bowls.length>0 && bowls.every(g=>g.played);
+    if(SEASON.psPhase===undefined) SEASON.psPhase=0;
+    const phase     = SEASON.psPhase;
+
+    // Phase driven by SEASON.psPhase — never auto-advances
+    if(phase===0){
+      if(!r0Done){
+        $('btn-sim-week').disabled=false;
+        $('btn-sim-week').textContent='⚡ Sim CFP First Round';
+        $('btn-sim-week').onclick=()=>{simPlayoffRound(0);renderSchedTab(false);updateSeasonUI();};
+        $('sim-msg').textContent='CFP First Round — campus sites';
+      } else {
+        $('btn-sim-week').disabled=false;
+        $('btn-sim-week').textContent='→ Advance to Bowl Season & Quarterfinals';
+        $('btn-sim-week').onclick=()=>{ postseasonAdvancePhase(); };
+        $('sim-msg').textContent='First Round complete';
+      }
+    } else if(phase===1){
+      const bDone=bowls.filter(g=>g.played).length, bTot=bowls.length;
+      if(!qfDone && !bowlsDone){
+        $('btn-sim-week').disabled=false;
+        $('btn-sim-week').textContent='⚡ Sim Bowls & Quarterfinals';
+        $('btn-sim-week').onclick=()=>{simPlayoffRound(1);simAllBowls();};
+      } else if(!qfDone){
+        $('btn-sim-week').disabled=false;
+        $('btn-sim-week').textContent='⚡ Sim Quarterfinals';
+        $('btn-sim-week').onclick=()=>{simPlayoffRound(1);renderSchedTab(false);updateSeasonUI();};
+      } else if(!bowlsDone){
+        $('btn-sim-week').disabled=false;
+        $('btn-sim-week').textContent=`⚡ Sim Remaining Bowls (${bTot-bDone})`;
+        $('btn-sim-week').onclick=()=>{simAllBowls();};
+      } else {
+        $('btn-sim-week').disabled=false;
+        $('btn-sim-week').textContent='→ Advance to Semifinals';
+        $('btn-sim-week').onclick=()=>{ postseasonAdvancePhase(); };
+      }
+      $('sim-msg').textContent=`Bowl Season: ${bDone}/${bTot} · QF: ${rounds[1].games.filter(g=>g.played).length}/4`;
+    } else if(phase===2){
+      if(!sfDone){
+        $('btn-sim-week').disabled=false;
+        $('btn-sim-week').textContent='⚡ Sim Semifinals';
+        $('btn-sim-week').onclick=()=>{simPlayoffRound(2);renderSchedTab(false);updateSeasonUI();};
+        $('sim-msg').textContent='CFP Semifinals';
+      } else {
+        $('btn-sim-week').disabled=false;
+        $('btn-sim-week').textContent='→ Advance to National Championship';
+        $('btn-sim-week').onclick=()=>{ postseasonAdvancePhase(); };
+        $('sim-msg').textContent='Semifinals complete';
+      }
+    } else if(phase===3){
+      if(!chDone){
+        $('btn-sim-week').disabled=false;
+        $('btn-sim-week').textContent='⚡ Sim Championship';
+        $('btn-sim-week').onclick=()=>{simPlayoffRound(3);renderSchedTab(false);updateSeasonUI();};
+        $('sim-msg').textContent='CFP National Championship';
+      } else {
+        $('btn-sim-week').disabled=true;
+        $('btn-sim-week').textContent='🏆 Season Complete';
+        $('sim-msg').textContent=SEASON.champion?`Champion: ${SEASON.champion.name}`:'Season complete';
+        if(!SEASON.psPhase || SEASON.psPhase < 4) { SEASON.psPhase=4; updateSeasonUI(); }
+      }
+    } else {
+      $('btn-sim-week').disabled=true;
+      $('btn-sim-week').textContent='🏆 Season Complete';
+      $('sim-msg').textContent=SEASON.champion?`Champion: ${SEASON.champion.name}`:'Postseason complete';
+    }
     return;
+  } catch(e) { document.body.insertAdjacentHTML('afterbegin','<div style="position:fixed;top:0;left:0;right:0;background:darkred;color:#fff;padding:8px;z-index:99999;font-size:11px;word-break:break-all;"><b>renderSimTab</b>: '+e.message+' | '+(e.stack||'').replace(/\n/g,'|').slice(0,300)+'</div>'); return; }
   }
   if(w>SEASON.totalWeeks){
     $('btn-sim-week').disabled=true;
@@ -4876,10 +5489,10 @@ function renderSimTab(){
 }
 
 function populatePlayGameSel(){
-  if(!SEASON)return;
+  const sel=$('play-game-sel');
+  if(!sel||!SEASON)return;
   const w=SEASON.week; if(w>SEASON.totalWeeks)return;
   const games=SEASON.schedule[w-1];
-  const sel=$('play-game-sel');
   sel.innerHTML=games.filter(g=>!g.played&&g.homeIdx>=0).map((g,i)=>{
     const hT=SEASON.teams[g.homeIdx],aT=SEASON.teams[g.awayIdx];
     return`<option value="${SEASON.schedule[w-1].indexOf(g)}">${hT.name} vs ${aT.name}${g.isConfGame?' (Conf)':''}</option>`;
@@ -4890,18 +5503,30 @@ function populatePlayGameSel(){
 function playSelectedGame(){
   if(!SEASON)return;
   const w=SEASON.week; if(w>SEASON.totalWeeks)return;
-  const gIdx=parseInt($('play-game-sel').value);
+  const gIdx=parseInt($('play-game-sel')?$('play-game-sel').value:0);
   const game=SEASON.schedule[w-1][gIdx];
   if(!game||game.played||game.homeIdx<0)return;
+  playGameInline(w-1, gIdx);
+}
+
+function playGameInline(weekIdx, gameIdx){
+  if(!SEASON)return;
+  const w=weekIdx+1;
+  const game=SEASON.schedule[weekIdx][gameIdx];
+  if(!game||game.played||game.homeIdx<0)return;
   const home=SEASON.teams[game.homeIdx], away=SEASON.teams[game.awayIdx];
-  gameContext={mode:'season',weekIdx:w-1,gameIdx:gIdx};
+  const preSimApSnap = (SEASON.apRankings[SEASON.apRankings.length-1]||[]).slice();
+  gameContext={mode:'season',weekIdx,gameIdx};
   $('game-ctx-lbl').textContent=`${w===13?'CCG':('Wk '+w)}: ${home.name} vs ${away.name}`;
   $('game-location-lbl').textContent=home.city?'📍 '+home.city:'';
   showScreen('screen-game');
   initGame(home,away,'random',(hs,as_,hBS,aBS)=>{
     applyResult(game,hs,as_,hBS,aBS);
     recalcPts();saveRankings();
-    renderAllTabs();renderSchedTab(false);populatePlayGameSel();
+    // Push this result into week-results with updated records
+    renderWeekResults([{home, away, homeScore:hs, awayScore:as_, rivalry:game.rivalryName,
+      weather:game.weather, attendance:game.attendance, homeRating:home.base, awayRating:away.base, apSnap:preSimApSnap}]);
+    renderAllTabs();renderSchedTab(false);
     $('btn-fin').textContent='📊 Box Score';
     $('btn-fin').onclick=()=>openBoxScore(home,away,hs,as_,{home:hBS,away:aBS},home.city,game.attendance);
   });
@@ -4980,14 +5605,14 @@ function renderWeekResults(results){
       <div class="result-item-row${hw?' winner':''}">
         <div style="display:flex;align-items:center;gap:6px;min-width:0;flex:1;">
           <div class="t-dot" style="background:${r.home.color};flex-shrink:0;"></div>
-          <span class="${hw?'result-w':'result-l'}" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${r.home.name}${hBadge}</span>
+          <span class="${hw?'result-w':'result-l'}" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${r.home.name}${recStr(r.home)}${hBadge}</span>
         </div>
         <span class="${hw?'result-w':'result-l'}" style="flex-shrink:0;">${r.homeScore}</span>
       </div>
       <div class="result-item-row${!hw?' winner':''}">
         <div style="display:flex;align-items:center;gap:6px;min-width:0;flex:1;">
           <div class="t-dot" style="background:${r.away.color};flex-shrink:0;"></div>
-          <span class="${!hw?'result-w':'result-l'}" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${r.away.name}${aBadge}</span>
+          <span class="${!hw?'result-w':'result-l'}" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${r.away.name}${recStr(r.away)}${aBadge}</span>
         </div>
         <span class="${!hw?'result-w':'result-l'}" style="flex-shrink:0;">${r.awayScore}</span>
       </div>
@@ -5053,14 +5678,14 @@ function renderGotwInResults(week) {
         <div class="gotw-team">
           <div class="gotw-dot" style="background:${hT.color};box-shadow:0 0 8px ${hT.color}88;"></div>
           <div class="gotw-team-info">
-            <div class="gotw-team-name" style="${hw?'font-weight:800;':''}">${hT.name} ${hBadge}</div>
+            <div class="gotw-team-name" style="${hw?'font-weight:800;':''}">${hT.name}${recStr(hT)} ${hBadge}</div>
             <div class="gotw-team-sub">${hT.conf} · Home</div>
           </div>
         </div>
         <div class="gotw-vs" style="font-size:1.1rem;color:var(--ink);">${game.homeScore}–${game.awayScore}</div>
         <div class="gotw-team gotw-team-right">
           <div class="gotw-team-info" style="text-align:right;">
-            <div class="gotw-team-name" style="${!hw?'font-weight:800;':''}">${aT.name} ${aBadge}</div>
+            <div class="gotw-team-name" style="${!hw?'font-weight:800;':''}">${aT.name}${recStr(aT)} ${aBadge}</div>
             <div class="gotw-team-sub">${aT.conf} · Away</div>
           </div>
           <div class="gotw-dot" style="background:${aT.color};box-shadow:0 0 8px ${aT.color}88;"></div>
@@ -5078,14 +5703,14 @@ function renderGotwInResults(week) {
         <div class="gotw-team">
           <div class="gotw-dot" style="background:${hT.color};box-shadow:0 0 8px ${hT.color}88;"></div>
           <div class="gotw-team-info">
-            <div class="gotw-team-name">${hT.name} ${hBadge}</div>
+            <div class="gotw-team-name">${hT.name}${recStr(hT)} ${hBadge}</div>
             <div class="gotw-team-sub">${hT.conf} · Home · Rated ${hT.rating}</div>
           </div>
         </div>
         <div class="gotw-vs">VS</div>
         <div class="gotw-team gotw-team-right">
           <div class="gotw-team-info" style="text-align:right;">
-            <div class="gotw-team-name">${aT.name} ${aBadge}</div>
+            <div class="gotw-team-name">${aT.name}${recStr(aT)} ${aBadge}</div>
             <div class="gotw-team-sub">${aT.conf} · Away · Rated ${aT.rating}</div>
           </div>
           <div class="gotw-dot" style="background:${aT.color};box-shadow:0 0 8px ${aT.color}88;"></div>
