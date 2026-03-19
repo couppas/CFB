@@ -1842,8 +1842,11 @@ function simInstant(homeT, awayT, weather) {
   // Pre-game decision modifiers (player's team only)
   const hPreMod = (SEASON?.myTeamIdx === homeT.idx && homeT._preGameRatingMod) ? homeT._preGameRatingMod : 0;
   const aPreMod = (SEASON?.myTeamIdx === awayT.idx && awayT._preGameRatingMod) ? awayT._preGameRatingMod : 0;
-  const hVarMod = (SEASON?.myTeamIdx === homeT.idx && homeT._decisionVariance) ? (Math.random()<0.5?1:-1)*homeT._decisionVariance*0.5 : 0;
-  const aVarMod = (SEASON?.myTeamIdx === awayT.idx && awayT._decisionVariance) ? (Math.random()<0.5?1:-1)*awayT._decisionVariance*0.5 : 0;
+  // Variance mod: positive = more volatile (bigger swings), applied as random ±
+  // but only kicks in to HELP when team is performing well (above 50% win prob baseline)
+  // Simpler: just use it as extra noise on top of the rating for high-stakes games
+  const hVarMod = (SEASON?.myTeamIdx === homeT.idx && homeT._decisionVariance) ? (Math.random() * homeT._decisionVariance * 0.4) : 0;
+  const aVarMod = (SEASON?.myTeamIdx === awayT.idx && awayT._decisionVariance) ? (Math.random() * awayT._decisionVariance * 0.4) : 0;
   const hEffRating = clamp(effectiveRating(homeT.rating, hCoach?.rating) + homeFieldBonus + hEdge + rookieVar(hCoach) + hPreMod + hVarMod, 40, 105);
   const aEffRating = clamp(effectiveRating(awayT.rating, aCoach?.rating) + aEdge + rookieVar(aCoach) + aPreMod + aVarMod, 40, 105);
   // Clear decision modifiers after use
@@ -2266,26 +2269,36 @@ function applyPreGameDecision() {
   const myC=SEASON.coaches?.[SEASON.myTeamIdx];
   if(!myT) return;
   let ratingMod=0;
-  // Game plan
-  if(d.gamePlan==='aggressive')   { ratingMod += myC?.style==='air-raid'?3:-1;  myT._decisionVariance=8; }
-  else if(d.gamePlan==='conservative') { ratingMod += (myC?.style==='run-first'||myC?.style==='defensive')?3:-1; myT._decisionVariance=-4; }
-  else myT._decisionVariance=0;
-  // Target
+  // Game plan — always a net positive choice (no penalties for mismatches)
+  if(d.gamePlan==='aggressive') {
+    ratingMod += myC?.style==='air-raid' ? 5 : 3;
+    myT._decisionVariance = 12;
+  } else if(d.gamePlan==='conservative') {
+    ratingMod += (myC?.style==='run-first'||myC?.style==='defensive') ? 5 : 3;
+    myT._decisionVariance = 4;
+  } else {
+    // Balanced: small consistent boost
+    ratingMod += 2;
+    myT._decisionVariance = 6;
+  }
+  // Target — all options give a boost, good matchups give more
   const w=SEASON.week; const games=SEASON.schedule[w-1]||[];
   const gi=games.findIndex(g=>(g.homeIdx===SEASON.myTeamIdx||g.awayIdx===SEASON.myTeamIdx)&&!g.played&&g.homeIdx>=0);
   if(gi>=0) {
     const game=games[gi]; const oppIdx=game.homeIdx===SEASON.myTeamIdx?game.awayIdx:game.homeIdx;
     const oppC=SEASON.coaches?.[oppIdx];
-    if(d.target==='their-offense' && oppC?.style==='air-raid') ratingMod+=3;
-    if(d.target==='their-defense' && myC?.style==='air-raid')  ratingMod+=2;
-    if(d.target==='their-defense' && myC?.style==='run-first') ratingMod-=1;
+    if(d.target==='their-offense') ratingMod += oppC?.style==='air-raid' ? 4 : 2;
+    if(d.target==='neutral')       ratingMod += 2;
+    if(d.target==='their-defense') ratingMod += myC?.style==='air-raid'||myC?.style==='run-first' ? 4 : 2;
   }
-  // Motivation
-  if(d.motivation==='fired-up') myT._decisionVariance=(myT._decisionVariance||0)+10;
-  if(d.motivation==='steady')   ratingMod+=2;
+  // Motivation — all positive, fired-up adds variance
+  if(d.motivation==='fired-up') { myT._decisionVariance=(myT._decisionVariance||0)+8; ratingMod+=1; }
+  if(d.motivation==='steady')   ratingMod+=3;
+  if(d.motivation==='normal')   ratingMod+=1;
   // Health
-  if(d.health==='push') ratingMod+=2;
-  if(d.health==='rest') ratingMod-=2;
+  if(d.health==='push') ratingMod+=3;
+  if(d.health==='normal') ratingMod+=1;
+  if(d.health==='rest')  ratingMod-=1; // small cost, not punishing
   // Inspire: +20 flat boost, record use (max 2 per season)
   if(d.inspire && (SEASON.inspireUsed||[]).length < 2) {
     if(!SEASON.inspireUsed) SEASON.inspireUsed = [];
@@ -6722,7 +6735,10 @@ function coachStyleEdge(hCoach, aCoach, weather, isRivalry, isPostseason) {
 // Effective rating incorporating coach influence (65% team, 35% coach)
 function effectiveRating(teamRating, coachRating) {
   if(!coachRating) return teamRating;
-  return Math.round(teamRating * 0.65 + coachRating * 0.35);
+  // Coach modifies team rating by up to ±8 points relative to a baseline of 70
+  // Elite coach (99): +8.7, Average (70): 0, Poor (40): -6
+  const coachMod = Math.round((coachRating - 70) * 0.29);
+  return teamRating + coachMod;
 }
 
 // Get coach for a team index
@@ -7945,12 +7961,10 @@ function openMatchupPreview(weekIdx, gameIdx){
   const rankCls=cfpAvail?'badge-cfp':'badge-ap';
   const rankStr=t=>{const r=getRank(t.idx,rankSnap);return r&&r<=25?`<span class="badge ${rankCls}" style="font-size:.6rem;">${rankLabel} #${r}</span>`:'';}
 
-  // Win probability based on rating + home field
-  const hfa = 3; // home field advantage points
-  const hAdj = hT.rating + hfa;
-  const aAdj = aT.rating;
-  const diff = hAdj - aAdj;
-  const hWinPct = Math.round(Math.min(95, Math.max(5, 50 + diff * 2.2)));
+  // Win probability based on rating + home field + coaching
+  const hWinProb = winProbability(hT.rating, aT.rating, true,
+    getCoach(hT.idx), getCoach(aT.idx), 'clear', !!game.rivalryName, false);
+  const hWinPct = Math.round(Math.min(95, Math.max(5, hWinProb * 100)));
   const aWinPct = 100 - hWinPct;
   const favored = hWinPct >= aWinPct ? hT : aT;
   const favPct = Math.max(hWinPct, aWinPct);
