@@ -534,6 +534,8 @@ select:focus{border-color:var(--navy);}
           <button class="btn btn-ghost btn-sm" id="btn-replay-week" onclick="replayWeek()" style="display:none;">↺ Replay</button>
         </div>
         <div id="sim-msg">Ready to simulate.</div>
+        <button id="btn-my-team" class="btn btn-ghost btn-sm" onclick="showTeamPicker()" style="font-size:.65rem;padding:3px 9px;border-radius:10px;margin-left:6px;display:none;">🏫 Pick My Team</button>
+        <span id="prestige-display" style="font-size:.62rem;color:var(--muted);margin-left:8px;display:none;"></span>
       </div>
     </div>
     <div id="week-results" style="margin-bottom:14px;"></div>
@@ -588,6 +590,7 @@ select:focus{border-color:var(--navy);}
       <div class="rank-chart-wrap" id="rank-chart-wrap"></div>
       <div class="card" id="team-stats-card"><div class="card-hdr"><span class="card-title">Season Stats</span></div><div class="card-body" id="team-stats-body"></div></div>
     </div>
+    <div class="card" id="team-franchise-card" style="display:none;"><div class="card-hdr"><span class="card-title">Franchise History</span></div><div class="card-body" id="team-franchise-body"></div></div>
     <div class="card"><div class="card-hdr"><span class="card-title">Game-by-Game Results</span><span style="font-size:.68rem;color:var(--muted2);font-style:italic;">Click played game to view box score</span></div><div style="overflow-x:auto;" id="team-games-wrap"></div></div>
   </div>
 
@@ -1109,6 +1112,13 @@ function initSeason() {
     weekHeadlines: {},   // keyed by week number: {paragraph, totw, loading}
     upsetLog: [],        // [{week, winnerName, loserName, score, loserRank, ratingGap, level}]
     gotw: {},            // keyed by week number: {gameIdx, reason}
+    coaches: {},         // keyed by team idx
+    coachHistory: {},    // keyed by team idx: prevWins for consecutive losing season tracking
+    myTeamIdx: null,
+    preGameDecision: null,
+    inspireUsed: [],         // array of {week, oppName}, max 2 uses
+    prestige: null,         // inherits from SEASON.franchise.prestige on new season
+    seasonNumber: null,     // which season we're on (1, 2, 3...)
   };
 
   saveRankings();
@@ -1117,6 +1127,196 @@ function initSeason() {
 // ═══════════════════════════════════════════════════════
 // SCHEDULE BUILDER
 // ═══════════════════════════════════════════════════════
+
+// ═══════════════════════════════════════════════════════
+// COACH SYSTEM
+// ═══════════════════════════════════════════════════════
+const COACH_FIRST = ['Bill','Jim','Nick','Dabo','Kirby','Brian','Ryan','Mark','Dave','Tom','Chris','Mike','Scott','Dan','Pat','Rich','Joe','Steve','Matt','Kyle','Shane','Derek','Lance','Todd','Gary','Frank','Bobby','Larry','Kevin','Barry','Chad','Blake','Zach','Cole','Grant','Reid','Brett','Craig','Glen','Troy','Brad','Hank','Earl','Ray','Vince','Lou','Mack','Art','Bo'];
+const COACH_LAST = ['Smith','Johnson','Williams','Brown','Jones','Davis','Miller','Wilson','Moore','Taylor','Anderson','Thomas','Jackson','White','Harris','Martin','Thompson','Garcia','Martinez','Robinson','Clark','Rodriguez','Lewis','Lee','Walker','Hall','Allen','Young','Hernandez','King','Wright','Lopez','Hill','Scott','Green','Adams','Baker','Gonzalez','Nelson','Carter','Mitchell','Perez','Roberts','Turner','Phillips','Campbell','Parker','Evans','Edwards'];
+const COACH_STYLES = ['balanced','air-raid','run-first','defensive'];
+const COACH_STYLE_LABELS = {balanced:'Balanced / Pro-style','air-raid':'Air Raid','run-first':'Run-First',defensive:'Defensive Specialist'};
+const COACH_STYLE_EMOJI = {balanced:'⚖️','air-raid':'🎯','run-first':'💪',defensive:'🛡️'};
+const COACH_EXP_LABELS = {rookie:'First-Year Coach',mid:'Established Coach',veteran:'Veteran Coach',legend:'Legend'};
+
+function generateCoaches() {
+  if(!SEASON) return;
+  SEASON.coaches = {};
+  SEASON.teams.forEach((t, i) => {
+    const r1 = Math.floor(Math.random() * COACH_FIRST.length);
+    const r2 = Math.floor(Math.random() * COACH_LAST.length);
+    const rating = Math.min(99, Math.max(40, Math.round(t.base * 0.6 + Math.random() * 36 + 4)));
+    const expRoll = Math.random();
+    let experience;
+    if(t.base >= 88)      experience = expRoll < 0.25 ? 'mid' : expRoll < 0.6 ? 'veteran' : 'legend';
+    else if(t.base >= 75) experience = expRoll < 0.3 ? 'rookie' : expRoll < 0.65 ? 'mid' : 'veteran';
+    else                   experience = expRoll < 0.45 ? 'rookie' : expRoll < 0.82 ? 'mid' : 'veteran';
+    const style = COACH_STYLES[Math.floor(Math.random() * COACH_STYLES.length)];
+    SEASON.coaches[t.idx] = {
+      name: COACH_FIRST[r1] + ' ' + COACH_LAST[r2],
+      rating,
+      style,
+      experience,
+      hotSeat: false,
+      rivalLoss: false,
+    };
+  });
+}
+
+function updateHotSeats() {
+  if(!SEASON || !SEASON.coaches) return;
+  const apSnap = SEASON.apRankings[SEASON.apRankings.length - 1] || [];
+  SEASON.teams.forEach(t => {
+    const c = SEASON.coaches[t.idx];
+    if(!c) return;
+    const totalGames = t.wins + t.losses;
+    if(totalGames < 8) { c.hotSeat = false; return; }
+    let hot = false;
+    if(totalGames >= 12 && t.wins < 6) hot = true;
+    const rank = getRank(t.idx, apSnap);
+    if(rank && rank <= 25 && t.losses > t.wins) hot = true;
+    if(c.rivalLoss && t.wins < 7) hot = true;
+    const prevWins = SEASON.coachHistory[t.idx];
+    if(prevWins !== undefined && prevWins < 6 && t.wins < 6 && totalGames >= 12) hot = true;
+    c.hotSeat = hot;
+  });
+}
+
+
+function renderFranchiseHistory(tIdx) {
+  const card = $('team-franchise-card');
+  const body = $('team-franchise-body');
+  if(!card || !body) return;
+
+  if(!FRANCHISE || !FRANCHISE.seasonHistory || !FRANCHISE.seasonHistory.length) {
+    card.style.display = 'none';
+    return;
+  }
+
+  const myTeamName = SEASON.teams[tIdx]?.name;
+  const history = FRANCHISE.seasonHistory.filter(e => e.teamName === myTeamName);
+  if(!history.length) { card.style.display = 'none'; return; }
+
+  // Cumulative stats
+  const totalWins = history.reduce((s,e) => s+e.wins, 0);
+  const totalLosses = history.reduce((s,e) => s+e.losses, 0);
+  const championships = history.filter(e => e.cfpResult === '🏆 National Champion').length;
+  const cfpApps = history.filter(e => e.cfpResult && e.cfpResult.startsWith('CFP')).length;
+  const bestSeason = history.reduce((b,e) => e.wins > b.wins ? e : b, history[0]);
+
+  // Base trajectory
+  const firstBase = history[0].base;
+  const lastBase = history[history.length-1].base;
+  const baseDiff = lastBase - firstBase;
+  const baseArrow = baseDiff >= 2 ? `<span style="color:#16a34a;">↑${baseDiff}</span>` :
+                    baseDiff <= -2 ? `<span style="color:#dc2626;">↓${Math.abs(baseDiff)}</span>` :
+                    `<span style="color:var(--muted);">→</span>`;
+
+  // Summary row
+  const summaryHtml = `
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;">
+      <div style="flex:1;min-width:60px;text-align:center;background:var(--surface2);border-radius:8px;padding:8px 6px;">
+        <div style="font-family:'Source Code Pro',monospace;font-size:1rem;font-weight:700;color:var(--ink);">${totalWins}–${totalLosses}</div>
+        <div style="font-size:.58rem;color:var(--muted);margin-top:2px;">All-Time</div>
+      </div>
+      <div style="flex:1;min-width:60px;text-align:center;background:var(--surface2);border-radius:8px;padding:8px 6px;">
+        <div style="font-family:'Source Code Pro',monospace;font-size:1rem;font-weight:700;color:var(--ink);">${history.length}</div>
+        <div style="font-size:.58rem;color:var(--muted);margin-top:2px;">Seasons</div>
+      </div>
+      ${championships ? `<div style="flex:1;min-width:60px;text-align:center;background:#fef9c3;border:1px solid #fcd34d;border-radius:8px;padding:8px 6px;">
+        <div style="font-size:1rem;font-weight:700;color:#92400e;">${championships}🏆</div>
+        <div style="font-size:.58rem;color:#92400e;margin-top:2px;">Titles</div>
+      </div>` : ''}
+      ${cfpApps ? `<div style="flex:1;min-width:60px;text-align:center;background:var(--surface2);border-radius:8px;padding:8px 6px;">
+        <div style="font-family:'Source Code Pro',monospace;font-size:1rem;font-weight:700;color:var(--ink);">${cfpApps}</div>
+        <div style="font-size:.58rem;color:var(--muted);margin-top:2px;">CFP Apps</div>
+      </div>` : ''}
+      <div style="flex:1;min-width:60px;text-align:center;background:var(--surface2);border-radius:8px;padding:8px 6px;">
+        <div style="font-family:'Source Code Pro',monospace;font-size:1rem;font-weight:700;color:var(--ink);">${lastBase} ${baseArrow}</div>
+        <div style="font-size:.58rem;color:var(--muted);margin-top:2px;">Prog. Rating</div>
+      </div>
+    </div>`;
+
+  // Season-by-season table
+  const rows = [...history].reverse().map(e => {
+    const rankStr = e.finalRank ? `#${e.finalRank}` : 'NR';
+    const resultColor = e.cfpResult === '🏆 National Champion' ? '#92400e' :
+      e.cfpResult?.startsWith('CFP') ? '#1d4ed8' :
+      e.cfpResult?.startsWith('W ') ? '#15803d' :
+      e.cfpResult?.startsWith('L ') ? '#b91c1c' : 'var(--muted)';
+    const resultBg = e.cfpResult === '🏆 National Champion' ? '#fef9c3' :
+      e.cfpResult?.startsWith('CFP') ? '#eff6ff' : 'transparent';
+    const pLabel = getPrestigeLabel(e.prestigeEnd);
+    return `<tr>
+      <td style="padding:7px 8px;border-bottom:1px solid var(--border);font-family:'Oswald',sans-serif;font-size:.75rem;font-weight:700;color:var(--navy);">S${e.season}</td>
+      <td style="padding:7px 8px;border-bottom:1px solid var(--border);font-family:'Source Code Pro',monospace;font-size:.75rem;font-weight:700;color:var(--ink);">${e.wins}–${e.losses}</td>
+      <td style="padding:7px 8px;border-bottom:1px solid var(--border);font-family:'Source Code Pro',monospace;font-size:.7rem;color:var(--muted);">${rankStr}</td>
+      <td style="padding:7px 6px;border-bottom:1px solid var(--border);">
+        <span style="font-size:.65rem;font-weight:600;color:${resultColor};background:${resultBg};padding:1px 5px;border-radius:4px;">${e.cfpResult||'—'}</span>
+      </td>
+      <td style="padding:7px 8px;border-bottom:1px solid var(--border);font-size:.65rem;color:var(--muted);white-space:nowrap;">${e.coachName}</td>
+      <td style="padding:7px 8px;border-bottom:1px solid var(--border);font-size:.65rem;font-weight:700;color:${pLabel.color};">${e.prestigeEnd}</td>
+    </tr>`;
+  }).join('');
+
+  body.innerHTML = `
+    ${summaryHtml}
+    <div style="overflow-x:auto;">
+      <table style="width:100%;border-collapse:collapse;font-size:.8rem;">
+        <thead>
+          <tr style="background:var(--surface2);">
+            <th style="text-align:left;padding:6px 8px;font-family:'Oswald',sans-serif;font-size:.6rem;letter-spacing:2px;color:var(--muted);border-bottom:1px solid var(--border);">YR</th>
+            <th style="text-align:left;padding:6px 8px;font-family:'Oswald',sans-serif;font-size:.6rem;letter-spacing:2px;color:var(--muted);border-bottom:1px solid var(--border);">REC</th>
+            <th style="text-align:left;padding:6px 8px;font-family:'Oswald',sans-serif;font-size:.6rem;letter-spacing:2px;color:var(--muted);border-bottom:1px solid var(--border);">RANK</th>
+            <th style="text-align:left;padding:6px 8px;font-family:'Oswald',sans-serif;font-size:.6rem;letter-spacing:2px;color:var(--muted);border-bottom:1px solid var(--border);">RESULT</th>
+            <th style="text-align:left;padding:6px 8px;font-family:'Oswald',sans-serif;font-size:.6rem;letter-spacing:2px;color:var(--muted);border-bottom:1px solid var(--border);">COACH</th>
+            <th style="text-align:left;padding:6px 8px;font-family:'Oswald',sans-serif;font-size:.6rem;letter-spacing:2px;color:var(--muted);border-bottom:1px solid var(--border);">PRES</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+  card.style.display = '';
+}
+
+function renderCoachPanel(tIdx) {
+  const card = $('team-coach-card');
+  const body = $('team-coach-body');
+  if(!card || !body) return;
+  if(!SEASON || !SEASON.coaches || !SEASON.coaches[tIdx]) { if(card) card.style.display='none'; return; }
+  const c = SEASON.coaches[tIdx];
+  const ratingColor = c.rating >= 85 ? '#16a34a' : c.rating >= 70 ? '#2563eb' : c.rating >= 55 ? '#d97706' : '#dc2626';
+  const ratingLabel = c.rating >= 85 ? 'Elite' : c.rating >= 70 ? 'Strong' : c.rating >= 55 ? 'Average' : 'Below Avg';
+  const tenure = c.yearsAtProgram ? `Year ${c.yearsAtProgram+1}` : 'Year 1';
+  const bowlStr = c.bowlWins ? `${c.bowlWins} bowl win${c.bowlWins!==1?'s':''}` : null;
+  const nattyStr = c.nattys ? `${c.nattys} 🏆` : null;
+  const rivalStr = c.rivalRecord && (c.rivalRecord.W||c.rivalRecord.L) ?
+    `Rival: ${c.rivalRecord.W}–${c.rivalRecord.L}` : null;
+  const careerStats = [bowlStr,nattyStr,rivalStr].filter(Boolean).join(' · ');
+  body.innerHTML = `
+    <div style="display:flex;align-items:flex-start;gap:14px;padding:2px 0;">
+      <div style="flex-shrink:0;width:48px;height:48px;border-radius:50%;background:var(--surface2);border:2px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:1.4rem;">🎓</div>
+      <div style="flex:1;min-width:0;">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px;">
+          <span style="font-family:'Oswald',sans-serif;font-size:1rem;font-weight:700;color:var(--ink);">Coach ${c.name}</span>
+          ${c.hotSeat ? '<span style="font-size:.62rem;background:#450a0a;color:#fca5a5;border:1px solid #ef4444;padding:2px 7px;border-radius:10px;font-weight:700;letter-spacing:1px;">🔥 HOT SEAT</span>' : ''}
+        </div>
+        <div style="font-size:.63rem;color:var(--muted);margin-bottom:8px;">${tenure}${careerStats?' · '+careerStats:''}</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
+          <span style="font-size:.68rem;background:var(--surface2);border:1px solid var(--border);padding:2px 8px;border-radius:10px;color:var(--ink2);">${COACH_STYLE_EMOJI[c.style]} ${COACH_STYLE_LABELS[c.style]}</span>
+          <span style="font-size:.68rem;background:var(--surface2);border:1px solid var(--border);padding:2px 8px;border-radius:10px;color:var(--ink2);">${COACH_EXP_LABELS[c.experience]}</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <div style="flex:1;height:6px;background:var(--surface2);border-radius:3px;overflow:hidden;">
+            <div style="width:${c.rating}%;height:100%;background:${ratingColor};border-radius:3px;"></div>
+          </div>
+          <span style="font-family:'Source Code Pro',monospace;font-size:.75rem;font-weight:700;color:${ratingColor};min-width:28px;">${c.rating}</span>
+          <span style="font-size:.65rem;color:var(--muted);">${ratingLabel}</span>
+        </div>
+      </div>
+    </div>`;
+  card.style.display = '';
+}
+
 function buildSchedule(teams) {
   const WEEKS = 12;
   const schedule = Array.from({length: 13}, () => []);
@@ -1632,8 +1832,25 @@ function simInstant(homeT, awayT, weather) {
     else if(fill >= 0.65) homeFieldBonus = 1.0;
     else if(fill >= 0.55) homeFieldBonus = 0.5;
   }
-  const homeRating = clamp(homeT.rating + homeFieldBonus, 55, 99);
-  const awayRating = awayT.rating;
+  const hCoach = getCoach(homeT.idx);
+  const aCoach = getCoach(awayT.idx);
+  const gameObj = arguments[3] || null;
+  const isRivalry = !!(gameObj && gameObj.rivalryName);
+  const isPostseason = !!(gameObj && gameObj.isPostseason);
+  const {hEdge, aEdge} = coachStyleEdge(hCoach, aCoach, w, isRivalry, isPostseason);
+  const rookieVar = (c) => c?.experience === 'rookie' ? (Math.random() < 0.5 ? 6 : -6) : 0;
+  // Pre-game decision modifiers (player's team only)
+  const hPreMod = (SEASON?.myTeamIdx === homeT.idx && homeT._preGameRatingMod) ? homeT._preGameRatingMod : 0;
+  const aPreMod = (SEASON?.myTeamIdx === awayT.idx && awayT._preGameRatingMod) ? awayT._preGameRatingMod : 0;
+  const hVarMod = (SEASON?.myTeamIdx === homeT.idx && homeT._decisionVariance) ? (Math.random()<0.5?1:-1)*homeT._decisionVariance*0.5 : 0;
+  const aVarMod = (SEASON?.myTeamIdx === awayT.idx && awayT._decisionVariance) ? (Math.random()<0.5?1:-1)*awayT._decisionVariance*0.5 : 0;
+  const hEffRating = clamp(effectiveRating(homeT.rating, hCoach?.rating) + homeFieldBonus + hEdge + rookieVar(hCoach) + hPreMod + hVarMod, 40, 105);
+  const aEffRating = clamp(effectiveRating(awayT.rating, aCoach?.rating) + aEdge + rookieVar(aCoach) + aPreMod + aVarMod, 40, 105);
+  // Clear decision modifiers after use
+  if(homeT._preGameRatingMod !== undefined) { homeT._preGameRatingMod = 0; homeT._decisionVariance = 0; }
+  if(awayT._preGameRatingMod !== undefined) { awayT._preGameRatingMod = 0; awayT._decisionVariance = 0; }
+  const homeRating = hEffRating;
+  const awayRating = aEffRating;
   const g={
     home:{...homeT,score:0,q:[0,0,0,0,0],rating:homeRating},
     away:{...awayT,score:0,q:[0,0,0,0,0],rating:awayRating},
@@ -1802,14 +2019,1024 @@ function generateBoxScore(offRating, defRating, myScore, oppScore, trackedStats,
 // ═══════════════════════════════════════════════════════
 // SEASON ACTIONS
 // ═══════════════════════════════════════════════════════
+
+// ═══════════════════════════════════════════════════════
+// TEAM PICKER + PRE-GAME DECISIONS MODAL
+// ═══════════════════════════════════════════════════════
+
+function showTeamPicker() {
+  if(!SEASON) return;
+  const teams = SEASON.teams.slice().sort((a,b)=>a.name.localeCompare(b.name));
+  const confGroups = {};
+  teams.forEach(t=>{ if(!confGroups[t.conf]) confGroups[t.conf]=[]; confGroups[t.conf].push(t); });
+  const confOrder=['SEC','B1G','B12','ACC','PAC','AAC','MWC','CUSA','MAC','SBC','IND'];
+  const confLabels={SEC:'SEC',B1G:'Big Ten',B12:'Big 12',ACC:'ACC',PAC:'Pac-12',
+    AAC:'American',MWC:'Mountain West',CUSA:'C-USA',MAC:'MAC',SBC:'Sun Belt',IND:'Independent'};
+  let optHtml='<option value="">-- Pick your school --</option>';
+  confOrder.forEach(conf=>{
+    const group=confGroups[conf]; if(!group||!group.length) return;
+    optHtml+=`<option value="" disabled>── ${confLabels[conf]||conf} ──</option>`;
+    group.forEach(t=>{ optHtml+=`<option value="${t.idx}"${SEASON.myTeamIdx===t.idx?' selected':''}>${t.name}</option>`; });
+  });
+  $('modal-body').innerHTML=`
+    <div style="padding:4px 0 16px;">
+      <div style="font-family:'Oswald',sans-serif;font-size:1.1rem;font-weight:700;letter-spacing:2px;color:var(--navy);margin-bottom:4px;">CHOOSE YOUR SCHOOL</div>
+      <div style="font-size:.78rem;color:var(--muted);margin-bottom:16px;">You'll make coaching decisions for this program each week.</div>
+      <select id="team-picker-sel" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:.85rem;background:var(--surface);color:var(--ink);margin-bottom:12px;">${optHtml}</select>
+      <div id="team-picker-preview" style="min-height:60px;margin-bottom:12px;"></div>
+      <div id="coach-name-wrap" style="display:none;margin-bottom:16px;">
+        <label style="font-size:.68rem;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);display:block;margin-bottom:6px;">Head Coach Name</label>
+        <input id="coach-name-input" type="text" maxlength="40"
+          style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:.85rem;background:var(--surface);color:var(--ink);box-sizing:border-box;"
+          placeholder="Enter coach name…">
+      </div>
+      <div style="display:flex;gap:10px;">
+        <button class="btn btn-primary" style="flex:1;" onclick="confirmTeamPick()">Let's Go →</button>
+        <button class="btn btn-ghost" onclick="skipTeamPick()">No Team</button>
+      </div>
+    </div>`;
+  $('modal-overlay').classList.add('open');
+  // Pre-fill preview if team already selected
+  if(SEASON.myTeamIdx!==null && SEASON.myTeamIdx!==undefined) {
+    const t=SEASON.teams[SEASON.myTeamIdx], c=SEASON.coaches?.[SEASON.myTeamIdx];
+    if(t) updatePickerPreview(t,c);
+  }
+  $('team-picker-sel').addEventListener('change',function(){
+    const idx=parseInt(this.value); if(isNaN(idx)) return;
+    const t=SEASON.teams[idx], c=SEASON.coaches?.[idx];
+    updatePickerPreview(t,c);
+    // Show coach name field and pre-fill with generated name
+    const wrap=$('coach-name-wrap');
+    if(wrap) wrap.style.display='block';
+    const inp=$('coach-name-input');
+    if(inp && c && !inp.value) inp.value=c.name;
+  });
+}
+
+function updatePickerPreview(t,c) {
+  $('team-picker-preview').innerHTML=`
+    <div style="background:linear-gradient(135deg,${t.color},${t.color2||'#111'});border-radius:8px;padding:12px 14px;color:#fff;">
+      <div style="font-family:'Oswald',sans-serif;font-size:1rem;font-weight:700;">${t.name} ${t.mascot||''}</div>
+      <div style="font-size:.7rem;opacity:.8;margin-top:2px;">${t.conf} · Base ${t.base} · ${t.wins}-${t.losses}</div>
+      ${c?`<div style="font-size:.7rem;opacity:.8;margin-top:4px;">Coach ${c.name} · ${COACH_STYLE_LABELS[c.style]} · ${c.rating} rated${c.hotSeat?' 🔥':''}</div>`:''}
+    </div>`;
+}
+
+function confirmTeamPick() {
+  const idx=parseInt($('team-picker-sel').value);
+  if(isNaN(idx)) { showToast('Please select a school first.'); return; }
+  SEASON.myTeamIdx=idx;
+  // Apply custom coach name if entered
+  const nameInput=$('coach-name-input');
+  if(nameInput && nameInput.value.trim() && SEASON.coaches?.[idx]) {
+    SEASON.coaches[idx].name = nameInput.value.trim();
+  }
+  closeModal();
+  updateSeasonUI();
+  if(!$('screen-season').classList.contains('active')) { switchTab('schedule');showScreen('screen-season'); }
+}
+
+function skipTeamPick() {
+  SEASON.myTeamIdx=null;
+  closeModal();
+  updateSeasonUI();
+  if(!$('screen-season').classList.contains('active')) { switchTab('schedule');showScreen('screen-season'); }
+}
+
+function maybeShowPreGameModal(onConfirm) {
+  if(SEASON.myTeamIdx===null||SEASON.myTeamIdx===undefined) { onConfirm(); return; }
+  const w=SEASON.week;
+  const games=SEASON.schedule[w-1]||[];
+  const gi=games.findIndex(g=>(g.homeIdx===SEASON.myTeamIdx||g.awayIdx===SEASON.myTeamIdx)&&!g.played&&g.homeIdx>=0);
+  if(gi<0) { onConfirm(); return; }
+  const game=games[gi];
+  const myIdx=SEASON.myTeamIdx;
+  const isHome=game.homeIdx===myIdx;
+  const myT=SEASON.teams[myIdx];
+  const oppT=SEASON.teams[isHome?game.awayIdx:game.homeIdx];
+  const myC=SEASON.coaches?.[myIdx];
+  const oppC=SEASON.coaches?.[isHome?game.awayIdx:game.homeIdx];
+
+  const ceResult=coachEdgeLabel(isHome?myT:oppT,isHome?oppT:myT,null,!!game.rivalryName,false);
+  const ceHtml=ceResult?`<div style="font-size:.65rem;color:#7c3aed;font-weight:600;margin-bottom:10px;">${ceResult.label}</div>`:'';
+  const styleLabel=myC?COACH_STYLE_LABELS[myC.style]:'Unknown';
+  const styleEmoji=myC?COACH_STYLE_EMOJI[myC.style]:'⚖️';
+  const planHint={balanced:'Balanced works with any game plan.',
+    'air-raid':'Aggressive suits your Air Raid system (+3 boost).',
+    'run-first':'Conservative suits your Run-First system (+3 boost).',
+    defensive:'Conservative suits your Defensive system (+3 boost).'}[myC?.style||'balanced'];
+
+  function decRow(title, field, opts) {
+    return `<div style="margin-bottom:12px;">
+      <div style="font-size:.63rem;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:6px;">${title}</div>
+      <div style="display:flex;gap:6px;">${opts.map(o=>`
+        <button class="pregame-opt" data-field="${field}" data-val="${o.val}"
+          style="flex:1;padding:8px 6px;border:1px solid var(--border);border-radius:6px;background:var(--surface2);
+          font-size:.67rem;color:var(--ink);cursor:pointer;text-align:center;line-height:1.3;"
+          onclick="selectPreGameOpt(this,'${field}')">
+          <div style="font-size:.95rem;margin-bottom:2px;">${o.icon}</div>
+          <div style="font-weight:600;">${o.label}</div>
+          <div style="font-size:.58rem;color:var(--muted);margin-top:1px;">${o.desc}</div>
+        </button>`).join('')}
+      </div>
+    </div>`;
+  }
+
+  $('modal-body').innerHTML=`
+    <div style="padding:4px 0;">
+      <div style="font-family:'Oswald',sans-serif;font-size:.63rem;letter-spacing:3px;color:var(--muted);margin-bottom:6px;">PRE-GAME DECISIONS</div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap;">
+        <div style="width:10px;height:10px;border-radius:50%;background:${myT.color};flex-shrink:0;"></div>
+        <span style="font-family:'Oswald',sans-serif;font-size:.95rem;font-weight:700;">${myT.name}</span>
+        <span style="font-size:.72rem;color:var(--muted);">(${myT.wins}-${myT.losses})</span>
+        <span style="font-size:.75rem;color:var(--muted);">${isHome?'vs':'@'}</span>
+        <div style="width:10px;height:10px;border-radius:50%;background:${oppT.color};flex-shrink:0;"></div>
+        <span style="font-family:'Oswald',sans-serif;font-size:.95rem;font-weight:700;">${oppT.name}</span>
+        <span style="font-size:.72rem;color:var(--muted);">(${oppT.wins}-${oppT.losses})</span>
+      </div>
+      ${myC?`<div style="font-size:.67rem;color:var(--muted);margin-bottom:8px;">${styleEmoji} Coach ${myC.name} · ${styleLabel}${myC.hotSeat?' 🔥':''}</div>`:''}
+      ${ceHtml}
+      <div style="font-size:.63rem;color:var(--muted2);background:var(--surface2);border-radius:6px;padding:6px 10px;margin-bottom:14px;border:1px solid var(--border);">💡 ${planHint}</div>
+      ${decRow('Game Plan','gamePlan',[
+        {val:'aggressive',icon:'⚔️',label:'Aggressive',desc:'High upside, high risk'},
+        {val:'balanced',icon:'⚖️',label:'Balanced',desc:'Standard approach'},
+        {val:'conservative',icon:'🛡️',label:'Conservative',desc:'Minimize mistakes'},
+      ])}
+      ${decRow('Opponent Target','target',[
+        {val:'their-offense',icon:'🎯',label:'Attack Their O',desc:'Blitz & pressure'},
+        {val:'neutral',icon:'➡️',label:'Execute Our Game',desc:'Our system first'},
+        {val:'their-defense',icon:'💥',label:'Exploit Their D',desc:'Spread & isolate'},
+      ])}
+      ${decRow('Motivation','motivation',[
+        {val:'fired-up',icon:'🔥',label:'Fire Them Up',desc:'+variance, peak or bust'},
+        {val:'steady',icon:'🧘',label:'Stay Steady',desc:'Reduce upset risk'},
+        {val:'normal',icon:'👊',label:'Normal Prep',desc:'Standard week'},
+      ])}
+      ${decRow('Player Health','health',[
+        {val:'push',icon:'💪',label:'Push Through',desc:'Full effort, +2 rating'},
+        {val:'normal',icon:'🏃',label:'Normal Load',desc:'Standard practice'},
+        {val:'rest',icon:'😴',label:'Rest Key Men',desc:'−2 rating, safer'},
+      ])}
+      ${(()=>{
+        const inspireArr = SEASON.inspireUsed || [];
+        const usesLeft = 2 - inspireArr.length;
+        const allUsed = usesLeft <= 0;
+        if(allUsed) {
+          return `<div style="border:2px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:12px;opacity:.5;">
+            <div style="display:flex;align-items:center;gap:8px;">
+              <span style="font-size:1.1rem;">⚡</span>
+              <div>
+                <div style="font-family:'Oswald',sans-serif;font-size:.75rem;font-weight:700;color:var(--muted);letter-spacing:1px;">INSPIRE — BOTH USES SPENT</div>
+                ${inspireArr.map(u=>`<div style="font-size:.62rem;color:var(--muted);">Wk ${u.week} vs ${u.oppName}</div>`).join('')}
+              </div>
+            </div>
+          </div>`;
+        }
+        const isSelected = SEASON.preGameDecision?.inspire;
+        return `<div id="inspire-btn" onclick="toggleInspire()"
+          style="border:2px solid ${isSelected?'#f59e0b':'var(--border)'};border-radius:8px;padding:10px 12px;margin-bottom:12px;cursor:pointer;
+          background:${isSelected?'linear-gradient(135deg,#78350f22,#f59e0b22)':'var(--surface2)'};transition:all .15s;">
+          <div style="display:flex;align-items:center;gap:10px;">
+            <span style="font-size:1.4rem;">⚡</span>
+            <div style="flex:1;">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:2px;">
+                <span style="font-family:'Oswald',sans-serif;font-size:.82rem;font-weight:700;color:${isSelected?'#f59e0b':'var(--ink)'};">INSPIRE THE TEAM</span>
+                <span style="font-size:.55rem;background:${isSelected?'#f59e0b':'var(--muted)'};color:#fff;padding:1px 5px;border-radius:4px;font-weight:700;letter-spacing:1px;">${usesLeft} USE${usesLeft!==1?'S':''} LEFT</span>
+              </div>
+              <div style="font-size:.63rem;color:var(--muted);">+20 rating boost · Electric atmosphere · ${isSelected?'<span style="color:#f59e0b;font-weight:700;">ACTIVATED</span>':'Tap to activate'}</div>
+              ${inspireArr.length?`<div style="font-size:.6rem;color:var(--muted2);margin-top:2px;">Used: ${inspireArr.map(u=>'Wk '+u.week+' vs '+u.oppName).join(' · ')}</div>`:''}
+            </div>
+            ${isSelected?'<span style="font-size:1.2rem;">✓</span>':''}
+          </div>
+        </div>`;
+      })()}
+      <div style="display:flex;gap:10px;margin-top:6px;">
+        <button class="btn btn-primary" style="flex:1;" onclick="confirmPreGameDecision(window._pgCb)">⚡ Lock In & Sim</button>
+        <button class="btn btn-ghost" onclick="closeModal();window._pgCb&&window._pgCb()">Skip →</button>
+      </div>
+    </div>`;
+  window._pgCb = onConfirm;
+  $('modal-overlay').classList.add('open');
+}
+
+function selectPreGameOpt(btn, field) {
+  document.querySelectorAll(`.pregame-opt[data-field="${field}"]`).forEach(b=>{
+    b.style.background='var(--surface2)'; b.style.borderColor='var(--border)'; b.style.color='var(--ink)';
+  });
+  btn.style.background='var(--navy)'; btn.style.borderColor='var(--navy)'; btn.style.color='#fff';
+  if(!SEASON.preGameDecision) SEASON.preGameDecision={};
+  SEASON.preGameDecision[btn.dataset.field]=btn.dataset.val;
+}
+
+function confirmPreGameDecision(onConfirm) {
+  closeModal();
+  applyPreGameDecision();
+  if(typeof onConfirm==='function') onConfirm();
+}
+
+
+function toggleInspire() {
+  if((SEASON.inspireUsed||[]).length >= 2) return;
+  if(!SEASON.preGameDecision) SEASON.preGameDecision = {};
+  SEASON.preGameDecision.inspire = !SEASON.preGameDecision.inspire;
+  // Re-render just the inspire button
+  const btn = $('inspire-btn');
+  if(!btn) return;
+  const isSelected = SEASON.preGameDecision.inspire;
+  btn.style.border = `2px solid ${isSelected?'#f59e0b':'var(--border)'}`;
+  btn.style.background = isSelected ? 'linear-gradient(135deg,#78350f22,#f59e0b22)' : 'var(--surface2)';
+  btn.innerHTML = `
+    <div style="display:flex;align-items:center;gap:10px;">
+      <span style="font-size:1.4rem;">⚡</span>
+      <div style="flex:1;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:2px;">
+          <span style="font-family:'Oswald',sans-serif;font-size:.82rem;font-weight:700;color:${isSelected?'#f59e0b':'var(--ink)'};">INSPIRE THE TEAM</span>
+          <span style="font-size:.55rem;background:${isSelected?'#f59e0b':'var(--muted)'};color:#fff;padding:1px 5px;border-radius:4px;font-weight:700;letter-spacing:1px;">ONCE PER SEASON</span>
+        </div>
+        <div style="font-size:.63rem;color:var(--muted);">+20 rating boost · Electric atmosphere · ${isSelected?'<span style="color:#f59e0b;font-weight:700;">ACTIVATED</span>':'Tap to activate'}</div>
+      </div>
+      ${isSelected?'<span style="font-size:1.2rem;">✓</span>':''}
+    </div>`;
+}
+
+function applyPreGameDecision() {
+  const d=SEASON.preGameDecision;
+  if(!d||SEASON.myTeamIdx===null||SEASON.myTeamIdx===undefined) return;
+  const myT=SEASON.teams[SEASON.myTeamIdx];
+  const myC=SEASON.coaches?.[SEASON.myTeamIdx];
+  if(!myT) return;
+  let ratingMod=0;
+  // Game plan
+  if(d.gamePlan==='aggressive')   { ratingMod += myC?.style==='air-raid'?3:-1;  myT._decisionVariance=8; }
+  else if(d.gamePlan==='conservative') { ratingMod += (myC?.style==='run-first'||myC?.style==='defensive')?3:-1; myT._decisionVariance=-4; }
+  else myT._decisionVariance=0;
+  // Target
+  const w=SEASON.week; const games=SEASON.schedule[w-1]||[];
+  const gi=games.findIndex(g=>(g.homeIdx===SEASON.myTeamIdx||g.awayIdx===SEASON.myTeamIdx)&&!g.played&&g.homeIdx>=0);
+  if(gi>=0) {
+    const game=games[gi]; const oppIdx=game.homeIdx===SEASON.myTeamIdx?game.awayIdx:game.homeIdx;
+    const oppC=SEASON.coaches?.[oppIdx];
+    if(d.target==='their-offense' && oppC?.style==='air-raid') ratingMod+=3;
+    if(d.target==='their-defense' && myC?.style==='air-raid')  ratingMod+=2;
+    if(d.target==='their-defense' && myC?.style==='run-first') ratingMod-=1;
+  }
+  // Motivation
+  if(d.motivation==='fired-up') myT._decisionVariance=(myT._decisionVariance||0)+10;
+  if(d.motivation==='steady')   ratingMod+=2;
+  // Health
+  if(d.health==='push') ratingMod+=2;
+  if(d.health==='rest') ratingMod-=2;
+  // Inspire: +20 flat boost, record use (max 2 per season)
+  if(d.inspire && (SEASON.inspireUsed||[]).length < 2) {
+    if(!SEASON.inspireUsed) SEASON.inspireUsed = [];
+    ratingMod += 20;
+    myT._decisionVariance = (myT._decisionVariance||0) + 5;
+    const w=SEASON.week;
+    const games2=SEASON.schedule[w-1]||[];
+    const gi2=games2.findIndex(g=>(g.homeIdx===SEASON.myTeamIdx||g.awayIdx===SEASON.myTeamIdx)&&!g.played&&g.homeIdx>=0);
+    const oppName = gi2>=0 ? SEASON.teams[games2[gi2].homeIdx===SEASON.myTeamIdx?games2[gi2].awayIdx:games2[gi2].homeIdx]?.name||'opponent' : 'opponent';
+    SEASON.inspireUsed.push({week: w, oppName});
+  }
+  myT._preGameRatingMod=ratingMod;
+  SEASON.preGameDecision=null;
+}
+
+
+// ═══════════════════════════════════════════════════════
+// FRANCHISE / MULTI-SEASON SYSTEM
+// ═══════════════════════════════════════════════════════
+
+let FRANCHISE = null; // persists across seasons
+
+// Tradition floors: programs can't fall below these base ratings
+const TRADITION_FLOORS = {
+  'Alabama':82,'Georgia':80,'Ohio State':82,'Michigan':78,'Notre Dame':78,
+  'Texas':76,'Oklahoma':76,'USC':74,'Penn State':76,'LSU':76,
+  'Clemson':74,'Oregon':72,'Florida':72,'Tennessee':70,'Auburn':70,
+  'Michigan State':68,'Wisconsin':70,'Iowa':68,'Nebraska':68,'Arkansas':66,
+  'Ole Miss':65,'Mississippi State':64,'Kentucky':64,'Vanderbilt':58,
+  'Texas A&M':72,'Florida State':70,'Miami':70,'NC State':64,'Virginia Tech':66,
+  'Pittsburgh':64,'Syracuse':62,'Duke':60,'Wake Forest':60,'Georgia Tech':62,
+  'Louisville':64,'Boston College':62,'North Carolina':64,'Virginia':62,
+  'TCU':68,'Baylor':66,'Kansas State':66,'Iowa State':64,'Oklahoma State':68,
+  'Texas Tech':64,'West Virginia':64,'Kansas':58,'Cincinnati':64,'UCF':64,
+  'Houston':62,'Tulane':60,'Memphis':60,'SMU':62,'Army':60,'Navy':60,
+  'Air Force':62,'Boise State':66,'Colorado State':60,'Wyoming':60,
+  'Utah State':60,'New Mexico':56,'UNLV':56,'Fresno State':62,'San Jose State':58,
+  'Hawaii':56,'Nevada':56,'San Diego State':60,'Utah':68,'Washington':72,
+  'Washington State':64,'Oregon State':62,'Colorado':60,'California':62,
+  'Stanford':68,'Arizona':60,'Arizona State':62,'UCLA':68,
+  'Marshall':60,'Western Kentucky':60,'Middle Tennessee':58,'UTSA':60,
+  'Florida Atlantic':60,'Florida International':56,'Charlotte':56,
+  'Old Dominion':56,'North Texas':56,'Rice':56,'UTEP':54,'UAB':58,
+  'Miami (OH)':60,'Ohio':60,'Bowling Green':58,'Kent State':56,'Akron':54,
+  'Buffalo':58,'Ball State':56,'Central Michigan':58,'Eastern Michigan':56,
+  'Northern Illinois':60,'Toledo':62,'Western Michigan':60,
+  'Georgia Southern':60,'Appalachian State':62,'Coastal Carolina':60,
+  'Louisiana':60,'South Alabama':56,'Troy':58,'Arkansas State':56,
+  'Texas State':54,'Southern Miss':56,'South Carolina':66,
+  'Missouri':64,'Purdue':62,'Indiana':60,'Minnesota':62,'Northwestern':62,
+  'Illinois':60,'Rutgers':60,'Maryland':62
+};
+
+function initFranchise() {
+  if(FRANCHISE) return; // already exists
+  FRANCHISE = {
+    prestige: 50,
+    seasonNumber: 0,
+    coachHistory: {},
+    programBases: {},
+    myTeamIdx: null,
+    seasonHistory: [], // [{season, teamName, wins, losses, finalRank, cfpResult, coachName, prestige, base}]
+  };
+}
+
+function getPrestigeLabel(p) {
+  if(p >= 120) return {label:'Dynasty', color:'#f59e0b'};
+  if(p >= 80)  return {label:'Powerhouse', color:'#16a34a'};
+  if(p >= 50)  return {label:'Established', color:'#2563eb'};
+  if(p >= 25)  return {label:'Rising', color:'#7c3aed'};
+  return {label:'Building', color:'#6b7280'};
+}
+
+function awardPrestige(reason, amount) {
+  if(!FRANCHISE) return;
+  FRANCHISE.prestige = Math.max(0, (FRANCHISE.prestige||0) + amount);
+  return amount;
+}
+
+
+function recordSeasonHistory(prestigeEarned) {
+  if(!FRANCHISE || !SEASON) return;
+  const myIdx = FRANCHISE.myTeamIdx;
+  if(myIdx === null || myIdx === undefined) return;
+  const myT = SEASON.teams[myIdx];
+  if(!myT) return;
+
+  const apSnap = SEASON.apRankings[SEASON.apRankings.length-1] || [];
+  const finalRank = getRank(myIdx, apSnap);
+  const myC = SEASON.coaches?.[myIdx];
+
+  // Determine CFP/bowl result
+  let cfpResult = null;
+  const field = SEASON.playoffField;
+  if(field) {
+    const inField = field.find(e => e.teamIdx === myIdx);
+    if(SEASON.champion?.idx === myIdx) {
+      cfpResult = '🏆 National Champion';
+    } else if(inField) {
+      const rounds = SEASON.playoffRounds;
+      // Check how far they got
+      let furthest = 'First Round';
+      if(rounds[1]?.games.some(g => (g.homeIdx===myIdx||g.awayIdx===myIdx) && g.played))
+        furthest = 'Quarterfinal';
+      if(rounds[2]?.games.some(g => (g.homeIdx===myIdx||g.awayIdx===myIdx) && g.played))
+        furthest = 'Semifinal';
+      if(rounds[3]?.games.some(g => (g.homeIdx===myIdx||g.awayIdx===myIdx) && g.played))
+        furthest = 'Championship Game';
+      cfpResult = 'CFP ' + furthest;
+    }
+  }
+  if(!cfpResult && SEASON.bowlGames) {
+    const myBowl = SEASON.bowlGames.find(g =>
+      (g.homeIdx===myIdx||g.awayIdx===myIdx) && g.played);
+    if(myBowl) {
+      const won = myBowl.homeIdx===myIdx ? myBowl.homeScore > myBowl.awayScore
+                                         : myBowl.awayScore > myBowl.homeScore;
+      cfpResult = (won ? 'W ' : 'L ') + myBowl.bowl;
+    }
+  }
+  if(!cfpResult && myT.wins < 6) cfpResult = 'No Bowl';
+
+  const entry = {
+    season: FRANCHISE.seasonNumber || 1,
+    teamName: myT.name,
+    wins: myT.wins,
+    losses: myT.losses,
+    finalRank,
+    cfpResult,
+    coachName: myC ? myC.name : '—',
+    prestigeEnd: FRANCHISE.prestige || 0,
+    base: Math.round(FRANCHISE.programBases?.[myIdx] ?? myT.base),
+  };
+
+  if(!FRANCHISE.seasonHistory) FRANCHISE.seasonHistory = [];
+  // Prevent duplicate entries for the same season
+  if(FRANCHISE.seasonHistory.some(e => e.season === (FRANCHISE.seasonNumber||1) && e.teamName === myT.name)) return;
+  FRANCHISE.seasonHistory.push(entry);
+}
+
+function calcEndSeasonPrestige() {
+  if(!SEASON || !FRANCHISE || SEASON.myTeamIdx === null) return;
+  const myIdx = SEASON.myTeamIdx;
+  const myT = SEASON.teams[myIdx];
+  if(!myT) return;
+  let earned = 0;
+  const preseason = SEASON.apRankings[0] || [];
+  const preRank = getRank(myIdx, preseason);
+  const finalRank = getRank(myIdx, SEASON.apRankings[SEASON.apRankings.length-1] || []);
+  // Exceeded expectations
+  if(preRank && preRank > 15 && finalRank && finalRank <= 10) earned += 8;
+  if(!preRank && finalRank && finalRank <= 25) earned += 8;
+  // Win milestones
+  if(myT.wins >= 10) earned += 5;
+  if(myT.wins >= 12) earned += 5;
+  // Conf title
+  if(myT.isConfChamp) earned += 15;
+  // Bowl eligibility
+  if(myT.wins >= 6) earned += 3;
+  // Missing bowl
+  if(myT.wins < 6) earned -= 10;
+  // Rival loss when favored
+  if(SEASON.coaches?.[myIdx]?.rivalLoss) earned -= 5;
+  // CFP
+  const field = SEASON.playoffField;
+  if(field && field.find(e => e.teamIdx === myIdx)) earned += 10;
+  // Champion
+  if(SEASON.champion && SEASON.champion.idx === myIdx) earned += 25;
+  awardPrestige('season', earned);
+  return earned;
+}
+
+// ── Program rating drift ──────────────────────────────────────────
+function applyProgramDrift() {
+  if(!SEASON || !FRANCHISE) return;
+  SEASON.teams.forEach(t => {
+    const floor = TRADITION_FLOORS[t.name] || 54;
+    const totalGames = t.wins + t.losses;
+    if(totalGames < 8) return;
+    let drift = 0;
+    // Performance vs expectation
+    if(t.wins >= 11) drift += 3;
+    else if(t.wins >= 9) drift += 2;
+    else if(t.wins >= 7) drift += 1;
+    else if(t.wins < 6) drift -= 2;
+    else if(t.wins < 5) drift -= 3;
+    // CFP/conf champ bonuses
+    if(t.isConfChamp) drift += 2;
+    if(SEASON.playoffField?.find(e => e.teamIdx === t.idx)) drift += 2;
+    if(SEASON.champion?.idx === t.idx) drift += 1;
+    // Apply drift with tradition floor and ceiling
+    const currentBase = FRANCHISE.programBases[t.idx] ?? t.base;
+    const newBase = Math.max(floor, Math.min(99, currentBase + drift));
+    FRANCHISE.programBases[t.idx] = newBase;
+  });
+}
+
+// ── Coaching carousel logic ───────────────────────────────────────
+function runCoachingCarousel() {
+  if(!SEASON || !FRANCHISE) return [];
+  const events = [];
+  const openJobs = []; // {tIdx, programStrength}
+  const availableCoaches = []; // fired/retired coaches available for hire
+
+  updateHotSeats();
+
+  // Step 1: Fire hot seat coaches + legend retirements
+  SEASON.teams.forEach(t => {
+    const c = SEASON.coaches?.[t.idx];
+    if(!c) return;
+    // Save career history
+    if(!FRANCHISE.coachHistory[t.idx]) FRANCHISE.coachHistory[t.idx] = [];
+
+    const fired = c.hotSeat;
+    const retired = c.experience === 'legend' && Math.random() < 0.15;
+    const tenureEnd = fired || retired;
+
+    if(tenureEnd) {
+      // Record career
+      const hist = {
+        name: c.name, rating: c.rating, style: c.style,
+        wins: t.wins, losses: t.losses,
+        bowlWins: c.bowlWins||0, nattys: c.nattys||0,
+        rivalRecord: c.rivalRecord||{W:0,L:0},
+        years: c.yearsAtProgram||1,
+        reason: retired ? 'retirement' : 'fired',
+      };
+      FRANCHISE.coachHistory[t.idx].push(hist);
+      availableCoaches.push({...c, prevTeam: t.name, prevTeamIdx: t.idx});
+      openJobs.push({tIdx: t.idx, name: t.name, base: FRANCHISE.programBases[t.idx]??t.base, color: t.color});
+      events.push({type: retired?'retirement':'fired', coach: c.name, team: t.name,
+        reason: retired ? 'Riding off into the sunset after a legendary career' :
+          c.rivalLoss && t.wins < 7 ? `${t.wins}–${t.losses} record including a damaging rivalry loss` :
+          t.wins < 6 ? `A disappointing ${t.wins}–${t.losses} season fell short of bowl eligibility` :
+          `${t.wins}–${t.losses} record failed to meet expectations`,
+        color: t.color, wins: t.wins, losses: t.losses});
+      delete SEASON.coaches[t.idx];
+    } else {
+      // Coach stays — update tenure
+      c.yearsAtProgram = (c.yearsAtProgram||0) + 1;
+      c.rivalLoss = false; // reset for next season
+      c.hotSeatYears = c.hotSeat ? (c.hotSeatYears||0)+1 : 0;
+      c.prevWins = t.wins;
+    }
+  });
+
+  // Sort open jobs by program strength (best jobs first)
+  openJobs.sort((a,b) => b.base - a.base);
+
+  // Step 2: Fill open jobs — coordinator promotions + poaching
+  const hiredThisCarousel = new Set();
+  openJobs.forEach(job => {
+    // Try poaching: find a coach at a weaker program with rating > program base
+    let hired = null;
+    const poachCandidates = SEASON.teams
+      .filter(t => SEASON.coaches?.[t.idx] &&
+        SEASON.coaches[t.idx].rating >= job.base * 0.85 &&
+        (FRANCHISE.programBases[t.idx]??t.base) < job.base - 8 &&
+        !hiredThisCarousel.has(t.idx) &&
+        t.idx !== job.tIdx)
+      .sort((a,b) => SEASON.coaches[b.idx].rating - SEASON.coaches[a.idx].rating);
+
+    if(poachCandidates.length && Math.random() < 0.5) {
+      const donor = poachCandidates[0];
+      const coach = SEASON.coaches[donor.idx];
+      events.push({type:'poach', coach: coach.name,
+        from: donor.name, to: job.name,
+        color: job.color, fromColor: donor.color});
+      SEASON.coaches[job.tIdx] = {...coach, yearsAtProgram:0, hotSeat:false, rivalLoss:false};
+      openJobs.push({tIdx: donor.idx, name: donor.name,
+        base: FRANCHISE.programBases[donor.idx]??donor.base, color: donor.color});
+      hiredThisCarousel.add(donor.idx);
+      delete SEASON.coaches[donor.idx];
+      hired = true;
+    }
+
+    if(!hired) {
+      // Generate new coach (coordinator promotion or new hire)
+      const isPromotion = Math.random() < 0.4;
+      const r1 = Math.floor(Math.random() * COACH_FIRST.length);
+      const r2 = Math.floor(Math.random() * COACH_LAST.length);
+      const newRating = Math.min(99, Math.max(40, Math.round(job.base * 0.6 + Math.random()*28 + 6)));
+      const newExp = isPromotion ? 'rookie' : (Math.random()<0.5?'mid':'veteran');
+      const newCoach = {
+        name: COACH_FIRST[r1]+' '+COACH_LAST[r2],
+        rating: newRating, style: COACH_STYLES[Math.floor(Math.random()*4)],
+        experience: newExp, hotSeat:false, rivalLoss:false,
+        yearsAtProgram:0, bowlWins:0, nattys:0,
+        rivalRecord:{W:0,L:0},
+      };
+      SEASON.coaches[job.tIdx] = newCoach;
+      events.push({type: isPromotion?'promotion':'hire',
+        coach: newCoach.name, team: job.name,
+        color: job.color, rating: newRating,
+        desc: isPromotion ? 'Coordinator promoted to head coach' : 'New hire from the open market'});
+    }
+  });
+
+  // Coach of the Year: highest rated coach on a top-10 team
+  const apSnap = SEASON.apRankings[SEASON.apRankings.length-1]||[];
+  let cotyCoach = null, cotyTeam = null, cotyRank = 99;
+  SEASON.teams.forEach(t => {
+    const rank = getRank(t.idx, apSnap);
+    const c = SEASON.coaches?.[t.idx];
+    if(rank && rank <= 10 && c && (!cotyCoach || c.rating > cotyCoach.rating)) {
+      cotyCoach = c; cotyTeam = t; cotyRank = rank;
+    }
+  });
+  if(cotyCoach) events.unshift({type:'coty', coach:cotyCoach.name, team:cotyTeam.name,
+    rating:cotyCoach.rating, rank:cotyRank, color:cotyTeam.color,
+    record:`${cotyTeam.wins}–${cotyTeam.losses}`});
+
+  return events;
+}
+
+// ── Off-season carousel modal ─────────────────────────────────────
+function beginOffSeason() {
+  if(!SEASON) return;
+  if(SEASON._offSeasonStarted) return; // prevent double-fire
+  SEASON._offSeasonStarted = true;
+  initFranchise();
+  // Carry over myTeamIdx from SEASON to FRANCHISE
+  if(SEASON.myTeamIdx !== null && SEASON.myTeamIdx !== undefined)
+    FRANCHISE.myTeamIdx = SEASON.myTeamIdx;
+
+  const prestigeEarned = calcEndSeasonPrestige();
+  applyProgramDrift();
+  recordSeasonHistory(prestigeEarned);
+  const events = runCoachingCarousel();
+
+  // Update coach career stats
+  if(SEASON.coaches) {
+    SEASON.teams.forEach(t => {
+      const c = SEASON.coaches[t.idx];
+      if(!c) return;
+      c.bowlWins = (c.bowlWins||0) + (SEASON.bowlResults?.[t.idx]||0);
+      if(SEASON.champion?.idx === t.idx) c.nattys = (c.nattys||0)+1;
+      // Rival record update
+      if(!c.rivalRecord) c.rivalRecord = {W:0,L:0};
+      // rivalLoss already tracked; wins need to be inferred from season results
+    });
+  }
+
+  showOffSeasonCarousel(events, prestigeEarned);
+}
+
+function showOffSeasonCarousel(events, prestigeEarned) {
+  const myIdx = FRANCHISE.myTeamIdx;
+  const myT = myIdx !== null && myIdx !== undefined ? SEASON.teams[myIdx] : null;
+  const myC = myT ? SEASON.coaches?.[myIdx] : null;
+  const prestigeTotal = FRANCHISE.prestige || 0;
+  const pLabel = getPrestigeLabel(prestigeTotal);
+  const apSnap = SEASON.apRankings[SEASON.apRankings.length-1]||[];
+
+  // Separate COTY from bulk events
+  const cotyEv = events.find(e => e.type === 'coty');
+  const bulkEvents = events.filter(e => e.type !== 'coty');
+  const fired = bulkEvents.filter(e => e.type === 'fired');
+  const retired = bulkEvents.filter(e => e.type === 'retirement');
+  const poached = bulkEvents.filter(e => e.type === 'poach');
+  const hired = bulkEvents.filter(e => e.type === 'hire' || e.type === 'promotion');
+
+  // Always exactly 5 cards
+  const cards = [];
+
+  // ── Card 1: Season Summary ────────────────────────────────────
+  const finalRank = myT ? getRank(myIdx, apSnap) : null;
+  const champName = SEASON.champion?.name || null;
+  cards.push({ html: `
+    <div style="text-align:center;padding:4px 0 8px;">
+      <div style="font-size:2rem;margin-bottom:6px;">📋</div>
+      <div style="font-family:'Oswald',sans-serif;font-size:1.1rem;font-weight:700;color:var(--navy);letter-spacing:2px;margin-bottom:10px;">SEASON ${FRANCHISE.seasonNumber||1} COMPLETE</div>
+      ${champName ? `<div style="background:linear-gradient(135deg,#78350f,#f59e0b,#78350f);border-radius:8px;padding:8px 14px;margin-bottom:12px;font-family:'Oswald',sans-serif;font-size:.8rem;font-weight:700;color:#fff;letter-spacing:2px;">🏆 ${champName} — National Champions</div>` : ''}
+      ${myT ? `
+        <div style="display:inline-block;background:${myT.color}22;border:1px solid ${myT.color}44;border-radius:8px;padding:8px 16px;margin-bottom:12px;">
+          <div style="font-family:'Oswald',sans-serif;font-size:.95rem;font-weight:700;color:${myT.color};">${myT.name}</div>
+          <div style="font-family:'Source Code Pro',monospace;font-size:1.4rem;font-weight:700;color:var(--ink);">${myT.wins}–${myT.losses}</div>
+          ${finalRank ? `<div style="font-size:.68rem;color:var(--muted);">Final AP #${finalRank}</div>` : ''}
+        </div>
+        <div style="background:var(--surface2);border-radius:8px;padding:10px 12px;text-align:left;">
+          <div style="font-family:'Oswald',sans-serif;font-size:.6rem;letter-spacing:3px;color:var(--muted);margin-bottom:8px;">PRESTIGE REPORT</div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:5px;">
+            <span style="font-size:.73rem;color:var(--ink);">This season</span>
+            <span style="font-family:'Source Code Pro',monospace;font-size:.73rem;font-weight:700;color:${(prestigeEarned||0)>=0?'#16a34a':'#dc2626'};">${(prestigeEarned||0)>=0?'+':''}${prestigeEarned||0} pts</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;">
+            <span style="font-size:.73rem;color:var(--ink);">Total prestige</span>
+            <span style="font-family:'Source Code Pro',monospace;font-size:.73rem;font-weight:700;color:${pLabel.color};">${prestigeTotal} · ${pLabel.label}</span>
+          </div>
+        </div>
+      ` : `<div style="font-size:.78rem;color:var(--muted);">No team selected — use 🏫 Pick My Team to follow a program.</div>`}
+    </div>`
+  });
+
+  // ── Card 2: Coach of the Year ─────────────────────────────────
+  cards.push({ html: cotyEv ? `
+    <div style="text-align:center;padding:8px 0;">
+      <div style="font-size:2rem;margin-bottom:6px;">🏅</div>
+      <div style="font-family:'Oswald',sans-serif;font-size:.62rem;letter-spacing:3px;color:var(--muted);margin-bottom:6px;">COACH OF THE YEAR</div>
+      <div style="width:56px;height:56px;border-radius:50%;background:${cotyEv.color};margin:0 auto 10px;display:flex;align-items:center;justify-content:center;font-size:1.5rem;">🎓</div>
+      <div style="font-family:'Oswald',sans-serif;font-size:1.2rem;font-weight:700;color:var(--ink);margin-bottom:4px;">${cotyEv.coach}</div>
+      <div style="font-size:.75rem;color:var(--muted);margin-bottom:4px;">${cotyEv.team} · AP #${cotyEv.rank}</div>
+      <div style="font-size:.7rem;color:var(--muted);">Season record: ${cotyEv.record} · Coach rating: ${cotyEv.rating}</div>
+    </div>` : `
+    <div style="text-align:center;padding:24px 0;">
+      <div style="font-size:1.5rem;margin-bottom:8px;">🏅</div>
+      <div style="font-size:.78rem;color:var(--muted);">Coach of the Year data unavailable.</div>
+    </div>`
+  });
+
+  // ── Card 3: Coaching Carousel ─────────────────────────────────
+  function carouselRow(icon, label, color, items) {
+    if(!items.length) return '';
+    const rows = items.map(ev => {
+      if(ev.type==='fired') return `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--border);">
+        <div style="width:8px;height:8px;border-radius:50%;background:${ev.color};flex-shrink:0;"></div>
+        <div style="flex:1;min-width:0;">
+          <span style="font-size:.72rem;font-weight:600;color:var(--ink);">${ev.team}</span>
+          <span style="font-size:.65rem;color:var(--muted);"> — Coach ${ev.coach} fired (${ev.wins}–${ev.losses})</span>
+        </div>
+      </div>`;
+      if(ev.type==='retirement') return `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--border);">
+        <div style="width:8px;height:8px;border-radius:50%;background:${ev.color};flex-shrink:0;"></div>
+        <div style="flex:1;min-width:0;">
+          <span style="font-size:.72rem;font-weight:600;color:var(--ink);">${ev.team}</span>
+          <span style="font-size:.65rem;color:var(--muted);"> — Coach ${ev.coach} retires</span>
+        </div>
+      </div>`;
+      if(ev.type==='poach') return `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--border);">
+        <div style="width:8px;height:8px;border-radius:50%;background:${ev.color};flex-shrink:0;"></div>
+        <div style="flex:1;min-width:0;">
+          <span style="font-size:.72rem;font-weight:600;color:var(--ink);">${ev.coach}</span>
+          <span style="font-size:.65rem;color:var(--muted);"> — ${ev.from} → ${ev.to}</span>
+        </div>
+      </div>`;
+      return `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--border);">
+        <div style="width:8px;height:8px;border-radius:50%;background:${ev.color};flex-shrink:0;"></div>
+        <div style="flex:1;min-width:0;">
+          <span style="font-size:.72rem;font-weight:600;color:var(--ink);">${ev.team}</span>
+          <span style="font-size:.65rem;color:var(--muted);"> — ${ev.coach} (${ev.type==='promotion'?'promoted':'hired'})</span>
+        </div>
+      </div>`;
+    }).join('');
+    return `<div style="margin-bottom:12px;">
+      <div style="font-size:.62rem;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:${color};margin-bottom:4px;">${icon} ${label} (${items.length})</div>
+      <div style="max-height:120px;overflow-y:auto;">${rows}</div>
+    </div>`;
+  }
+
+  cards.push({ html: `
+    <div style="padding:4px 0;">
+      <div style="font-family:'Oswald',sans-serif;font-size:.62rem;letter-spacing:3px;color:var(--muted);margin-bottom:10px;">COACHING CAROUSEL</div>
+      <div style="display:flex;gap:12px;margin-bottom:14px;flex-wrap:wrap;">
+        <div style="text-align:center;flex:1;background:var(--surface2);border-radius:8px;padding:8px;">
+          <div style="font-family:'Source Code Pro',monospace;font-size:1.2rem;font-weight:700;color:#dc2626;">${fired.length}</div>
+          <div style="font-size:.6rem;color:var(--muted);">Fired</div>
+        </div>
+        <div style="text-align:center;flex:1;background:var(--surface2);border-radius:8px;padding:8px;">
+          <div style="font-family:'Source Code Pro',monospace;font-size:1.2rem;font-weight:700;color:var(--muted);">${retired.length}</div>
+          <div style="font-size:.6rem;color:var(--muted);">Retired</div>
+        </div>
+        <div style="text-align:center;flex:1;background:var(--surface2);border-radius:8px;padding:8px;">
+          <div style="font-family:'Source Code Pro',monospace;font-size:1.2rem;font-weight:700;color:#7c3aed;">${poached.length}</div>
+          <div style="font-size:.6rem;color:var(--muted);">Poached</div>
+        </div>
+        <div style="text-align:center;flex:1;background:var(--surface2);border-radius:8px;padding:8px;">
+          <div style="font-family:'Source Code Pro',monospace;font-size:1.2rem;font-weight:700;color:#2563eb;">${hired.length}</div>
+          <div style="font-size:.6rem;color:var(--muted);">Hired</div>
+        </div>
+      </div>
+      ${carouselRow('🚪','Fired','#dc2626',fired)}
+      ${carouselRow('👋','Retired','var(--muted)',retired)}
+      ${carouselRow('🔀','Poached','#7c3aed',poached)}
+      ${carouselRow('✍️','New Hires','#2563eb',hired)}
+    </div>`
+  });
+
+  // ── Card 4: GM Decision ───────────────────────────────────────
+  if(myT) {
+    cards.push({ type:'gm', html: buildGMCard(myIdx, myT, myC, !myC, prestigeTotal) });
+  } else {
+    cards.push({ html: `
+      <div style="text-align:center;padding:24px 0;">
+        <div style="font-size:1.5rem;margin-bottom:10px;">🏫</div>
+        <div style="font-size:.78rem;color:var(--muted);margin-bottom:16px;">No team selected. Pick a team to use GM features.</div>
+        <button class="btn btn-primary" onclick="closeModal();showTeamPicker()">Pick My Team</button>
+      </div>`
+    });
+  }
+
+  // ── Card 5: Start Next Season ──────────────────────────────────
+  cards.push({ html: `
+    <div style="text-align:center;padding:12px 0;">
+      <div style="font-size:2rem;margin-bottom:10px;">🏈</div>
+      <div style="font-family:'Oswald',sans-serif;font-size:1.1rem;font-weight:700;color:var(--navy);letter-spacing:2px;margin-bottom:6px;">READY FOR NEXT SEASON?</div>
+      <div style="font-size:.72rem;color:var(--muted);margin-bottom:6px;">Program ratings updated · Coaching carousel complete</div>
+      ${myT ? `<div style="font-size:.72rem;color:var(--muted);margin-bottom:20px;">Your prestige: <span style="font-weight:700;color:${pLabel.color};">${prestigeTotal} pts</span></div>` : '<div style="margin-bottom:20px;"></div>'}
+      <button class="btn btn-primary" style="width:100%;font-size:.9rem;padding:12px;" onclick="startNextSeason()">
+        🏈 Begin Season ${(FRANCHISE.seasonNumber||1)+1}
+      </button>
+    </div>`
+  });
+
+  // Render carousel — always exactly 5 cards, no per-event cards
+  let curCard = 0;
+  function renderCarousel() {
+    const card = cards[curCard];
+    const isLast = curCard === cards.length - 1;
+    const isFirst = curCard === 0;
+    $('modal-body').innerHTML = `
+      <div style="min-height:300px;">${card.html}</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-top:14px;padding-top:12px;border-top:1px solid var(--border);">
+        <button class="btn btn-ghost btn-sm" onclick="window._osNav(-1)" ${isFirst?'disabled':''} style="${isFirst?'opacity:.3;':''}">← Back</button>
+        <span style="font-size:.65rem;color:var(--muted);">${curCard+1} / ${cards.length}</span>
+        ${isLast ? '' : `<button class="btn btn-primary btn-sm" onclick="window._osNav(1)">Next →</button>`}
+      </div>`;
+  }
+  window._osNav = (dir) => {
+    curCard = Math.max(0, Math.min(cards.length-1, curCard+dir));
+    renderCarousel();
+  };
+  $('modal-title').textContent = 'Off-Season';
+  $('modal-location').textContent = '';
+  renderCarousel();
+  $('modal-overlay').classList.add('open');
+}
+
+function buildGMCard(myIdx, myT, myC, coachFired, prestigeTotal) {
+  const pLabel = getPrestigeLabel(prestigeTotal);
+  const coachCost = (rating) => rating >= 85 ? 30 : rating >= 70 ? 15 : rating >= 55 ? 5 : 0;
+  const availableForHire = Object.entries(SEASON.coaches||{})
+    .map(([idx,c]) => ({...c, tIdx:parseInt(idx), team:SEASON.teams[parseInt(idx)]?.name}))
+    .filter(c => c.tIdx !== myIdx)
+    .sort((a,b) => b.rating - a.rating)
+    .slice(0,8);
+
+  const fireBtn = myC ? `<button class="btn btn-ghost btn-sm" style="color:#dc2626;border-color:#dc2626;font-size:.65rem;" onclick="gmFireCoach()">Fire Coach (−10 prestige)</button>` : '';
+
+  const marketHtml = availableForHire.map(c => {
+    const cost = coachCost(c.rating);
+    const canAfford = prestigeTotal >= cost;
+    const rColor = c.rating>=85?'#16a34a':c.rating>=70?'#2563eb':c.rating>=55?'#d97706':'#dc2626';
+    return `<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);">
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:.75rem;font-weight:700;color:var(--ink);">${c.name}</div>
+        <div style="font-size:.62rem;color:var(--muted);">${COACH_STYLE_EMOJI[c.style]} ${COACH_STYLE_LABELS[c.style]} · ${COACH_EXP_LABELS[c.experience]}</div>
+        <div style="font-size:.62rem;color:var(--muted2);margin-top:1px;">${c.team||'Free Agent'}</div>
+      </div>
+      <div style="text-align:right;flex-shrink:0;">
+        <div style="font-family:'Source Code Pro',monospace;font-size:.78rem;font-weight:700;color:${rColor};">${c.rating}</div>
+        <div style="font-size:.6rem;color:var(--muted);">${cost>0?cost+' pts':'Free'}</div>
+      </div>
+      <button class="btn btn-primary btn-sm" style="font-size:.62rem;padding:3px 8px;${!canAfford?'opacity:.4;':''}"
+        ${!canAfford?'disabled':''} onclick="gmHireCoach(${c.tIdx},${cost})">Hire</button>
+    </div>`;
+  }).join('');
+
+  return `<div style="padding:4px 0;">
+    <div style="font-family:'Oswald',sans-serif;font-size:.65rem;letter-spacing:3px;color:var(--muted);margin-bottom:10px;">GM DECISIONS — ${myT.name.toUpperCase()}</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+      <span style="font-size:.75rem;color:var(--ink);">Prestige budget</span>
+      <span style="font-family:'Source Code Pro',monospace;font-weight:700;color:${pLabel.color};">${prestigeTotal} pts · ${pLabel.label}</span>
+    </div>
+    ${myC ? `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:12px;">
+      <div style="font-size:.7rem;font-weight:700;color:var(--ink);margin-bottom:2px;">Current: Coach ${myC.name}</div>
+      <div style="font-size:.65rem;color:var(--muted);">${COACH_STYLE_EMOJI[myC.style]} ${COACH_STYLE_LABELS[myC.style]} · ${myC.rating} rated · Year ${myC.yearsAtProgram||1}</div>
+      <div style="margin-top:8px;">${fireBtn}</div>
+    </div>` : `<div style="background:#450a0a;border:1px solid #ef4444;border-radius:8px;padding:10px 12px;margin-bottom:12px;">
+      <div style="font-size:.75rem;color:#fca5a5;font-weight:700;">Head coach position is vacant</div>
+      <div style="font-size:.68rem;color:#fca5a5;opacity:.8;margin-top:2px;">You must hire a new coach before next season.</div>
+    </div>`}
+    <div style="font-family:'Oswald',sans-serif;font-size:.63rem;letter-spacing:2px;color:var(--muted);margin-bottom:8px;">COACHING MARKET</div>
+    <div style="max-height:220px;overflow-y:auto;">${marketHtml}</div>
+  </div>`;
+}
+
+function gmFireCoach() {
+  if(!FRANCHISE || SEASON.myTeamIdx===null) return;
+  const myIdx = SEASON.myTeamIdx;
+  awardPrestige('fire', -10);
+  delete SEASON.coaches[myIdx];
+  showToast('Coach fired. −10 prestige. Hire a replacement.');
+  // Re-render carousel GM card
+  const myT = SEASON.teams[myIdx];
+  const card = $('modal-body').querySelector('div');
+  if(card) card.innerHTML = buildGMCard(myIdx, myT, null, true, FRANCHISE.prestige);
+}
+
+function gmHireCoach(fromTIdx, cost) {
+  if(!FRANCHISE || SEASON.myTeamIdx===null) return;
+  const myIdx = SEASON.myTeamIdx;
+  if(FRANCHISE.prestige < cost) { showToast('Not enough prestige!'); return; }
+  const coach = SEASON.coaches[fromTIdx];
+  if(!coach) { showToast('Coach no longer available.'); return; }
+  awardPrestige('hire', -cost);
+  SEASON.coaches[myIdx] = {...coach, yearsAtProgram:0, hotSeat:false, rivalLoss:false};
+  delete SEASON.coaches[fromTIdx];
+  showToast(`Coach ${coach.name} hired!${cost>0?' −'+cost+' prestige.':''}`);
+  const myT = SEASON.teams[myIdx];
+  $('modal-body').innerHTML = '<div style="padding:8px 0;">' + buildGMCard(myIdx, myT, SEASON.coaches[myIdx], false, FRANCHISE.prestige) + '</div>';
+}
+
+function startNextSeason() {
+  closeModal();
+  if(!FRANCHISE) initFranchise();
+  FRANCHISE.seasonNumber = (FRANCHISE.seasonNumber||1) + 1;
+
+  // Save carry-over data KEYED BY NAME (not idx, since idx reshuffles each season)
+  const savedCoachesByName = {};
+  if(SEASON.coaches) {
+    SEASON.teams.forEach(t => {
+      const c = SEASON.coaches[t.idx];
+      if(c) savedCoachesByName[t.name] = {...c};
+    });
+  }
+  const savedMyTeamName = FRANCHISE.myTeamIdx !== null && FRANCHISE.myTeamIdx !== undefined
+    ? SEASON.teams[FRANCHISE.myTeamIdx]?.name : null;
+  const savedPrestige = FRANCHISE.prestige || 50;
+  const savedProgramBases = {};
+  if(FRANCHISE.programBases) {
+    SEASON.teams.forEach(t => {
+      if(FRANCHISE.programBases[t.idx] !== undefined)
+        savedProgramBases[t.name] = FRANCHISE.programBases[t.idx];
+    });
+  }
+
+  // Re-init season (rebuilds teams from TEAMS_BASE_CLEAN, re-indexes)
+  G = null; gameContext = null; stopAuto();
+  $('week-results').innerHTML = '';
+  $('btn-adv-week').style.display = 'none';
+  $('btn-replay-week').style.display = 'none';
+
+  // Apply program base drifts to TEAMS_BASE_CLEAN before initSeason runs
+  // so ratings are computed from the updated base
+  TEAMS_BASE_CLEAN.forEach(t => {
+    if(savedProgramBases[t.name] !== undefined) {
+      t.base = Math.round(savedProgramBases[t.name]);
+    }
+  });
+
+  initSeason(); // rebuilds SEASON with updated bases, new idx assignments
+
+  // Restore coaches by team name → new idx
+  SEASON.coaches = {};
+  SEASON.teams.forEach(t => {
+    const saved = savedCoachesByName[t.name];
+    if(saved) {
+      SEASON.coaches[t.idx] = {...saved, rivalLoss: false};
+    } else {
+      // New coach for vacant positions
+      const r1=Math.floor(Math.random()*COACH_FIRST.length);
+      const r2=Math.floor(Math.random()*COACH_LAST.length);
+      const rating=Math.min(99,Math.max(40,Math.round(t.base*0.6+Math.random()*36+4)));
+      SEASON.coaches[t.idx]={
+        name:COACH_FIRST[r1]+' '+COACH_LAST[r2],
+        rating, style:COACH_STYLES[Math.floor(Math.random()*4)],
+        experience:'mid', hotSeat:false, rivalLoss:false,
+        yearsAtProgram:0, bowlWins:0, nattys:0, rivalRecord:{W:0,L:0},
+      };
+    }
+    // Update FRANCHISE.programBases with new idx
+    if(savedProgramBases[t.name] !== undefined) {
+      if(!FRANCHISE.programBases) FRANCHISE.programBases = {};
+      FRANCHISE.programBases[t.idx] = savedProgramBases[t.name];
+    }
+  });
+
+  // Restore my team by name → new idx
+  if(savedMyTeamName) {
+    const myT = SEASON.teams.find(t => t.name === savedMyTeamName);
+    SEASON.myTeamIdx = myT ? myT.idx : null;
+    FRANCHISE.myTeamIdx = SEASON.myTeamIdx;
+  } else {
+    SEASON.myTeamIdx = null;
+    FRANCHISE.myTeamIdx = null;
+  }
+
+  SEASON.prestige = savedPrestige;
+  FRANCHISE.prestige = savedPrestige;
+
+  // Explicitly clear all postseason state — belt and suspenders
+  SEASON.playoffField = null;
+  SEASON.playoffRounds = [];
+  SEASON.bowlGames = null;
+  SEASON.psPhase = 0;
+  SEASON.champion = null;
+  SEASON._offSeasonStarted = false;
+  // Restore sched-controls visibility (hidden by renderPostseasonTab)
+  const sc = $('sched-controls');
+  if(sc) sc.style.display = '';
+  // Restore tab-schedule original DOM if postseason wiped it
+  const tabSched = $('tab-schedule');
+  if(tabSched && !$('sched-game-list')) {
+    tabSched.innerHTML = `
+      <div class="week-select-bar" id="sched-controls">
+        <select id="sched-week-sel" onchange="showSchedWeek(parseInt(this.value))"></select>
+        <select id="sched-filter-sel" onchange="showSchedWeek(parseInt($('sched-week-sel').value))" style="font-family:'Oswald',sans-serif;font-size:.75rem;letter-spacing:1px;padding:6px 10px;border:1px solid var(--border);border-radius:7px;background:var(--surface);color:var(--ink);cursor:pointer;">
+          <option value="top25">⭐ Top 25 Games</option>
+          <option value="ALL">All Games</option>
+          <option value="SEC">SEC</option>
+          <option value="B1G">Big Ten</option>
+          <option value="B12">Big 12</option>
+          <option value="ACC">ACC</option>
+          <option value="AAC">American</option>
+          <option value="MWC">Mtn West</option>
+          <option value="SBC">Sun Belt</option>
+          <option value="CUSA">C-USA</option>
+          <option value="MAC">MAC</option>
+          <option value="Ind">Independents</option>
+        </select>
+        <span style="font-size:.75rem;color:var(--muted);" id="sched-status"></span>
+      </div>
+      <div id="sched-game-list"></div>`;
+  }
+
+  // Reset sim strip for new season
+  $('sim-msg').textContent = `Ready to simulate Week 1.`;
+  $('btn-sim-week').disabled = false;
+  $('btn-sim-week').textContent = '⚡ Simulate Week';
+  $('btn-sim-week').onclick = simWeekAll;
+  $('btn-adv-week').style.display = 'none';
+  $('btn-replay-week').style.display = 'none';
+
+  // Save preseason rankings so schedule renders correctly
+  saveRankings();
+
+  updateSeasonUI();
+  showScreen('screen-season');
+  switchTab('schedule');
+  renderSchedTab(true);
+  showToast(`🏈 Season ${FRANCHISE.seasonNumber} begins!`);
+}
+
 function simWeekAll() {
   const w = SEASON.week;
   if(w > SEASON.totalWeeks) return;
-  // If playoffs already generated, never allow re-simming regular season
-  if(SEASON.playoffField) {
-    showToast('⚠ Playoffs already set — go to Postseason tab.');
-    return;
+  if(SEASON.playoffField) { showToast('⚠ Playoffs already set — go to Postseason tab.'); return; }
+  // Show pre-game modal if player has a team with a game this week
+  if(SEASON.myTeamIdx !== null && SEASON.myTeamIdx !== undefined) {
+    const games = SEASON.schedule[w-1] || [];
+    const hasMyGame = games.some(g =>
+      (g.homeIdx===SEASON.myTeamIdx||g.awayIdx===SEASON.myTeamIdx) && !g.played && g.homeIdx>=0
+    );
+    if(hasMyGame) { maybeShowPreGameModal(()=>_doSimWeekAll()); return; }
   }
+  _doSimWeekAll();
+}
+function _doSimWeekAll() {
+  const w = SEASON.week;
+  if(w > SEASON.totalWeeks) return;
+  if(SEASON.playoffField) return;
 
   // For CCG week, always set up the actual teams first (idempotent)
   if(w === SEASON.totalWeeks) {
@@ -1859,7 +3086,7 @@ function simWeekAll() {
     if(game.played || game.homeIdx < 0) return;
     const hT = SEASON.teams[game.homeIdx];
     const aT = SEASON.teams[game.awayIdx];
-    const res = simInstant(hT, aT, 'random');
+    const res = simInstant(hT, aT, 'random', game);
     applyResult(game, res.homeScore, res.awayScore, res.homeBS, res.awayBS, res.weather);
     // Ensure attendance is calculated even if applyResult had an issue
     if(!game.attendance) game.attendance = calcAttendance(game, hT, aT);
@@ -2083,6 +3310,11 @@ function applyResult(game, hs, as_, hBS, aBS, weather) {
   if(game.isConfGame) {
     hT.confWins  += homeWon ? 1 : 0;  hT.confLosses  += homeWon ? 0 : 1;
     aT.confWins  += homeWon ? 0 : 1;  aT.confLosses  += homeWon ? 1 : 0;
+  }
+  // Track rival loss for hot seat evaluation
+  if(game.rivalryName && SEASON.coaches) {
+    const loserIdx = homeWon ? game.awayIdx : game.homeIdx;
+    if(SEASON.coaches[loserIdx]) SEASON.coaches[loserIdx].rivalLoss = true;
   }
 
   // Accumulate season stats from box score
@@ -2329,7 +3561,20 @@ function simBowlGame(idx) {
   if(!game || game.played) return;
   const hT = SEASON.teams[game.homeIdx];
   const aT = SEASON.teams[game.awayIdx];
-
+  // Show pre-game modal if this is the player's team
+  if(SEASON.myTeamIdx !== null && SEASON.myTeamIdx !== undefined &&
+    (game.homeIdx === SEASON.myTeamIdx || game.awayIdx === SEASON.myTeamIdx)) {
+    maybeShowPreGameModal(() => { applyPreGameDecision(); _doSimBowlGame(idx); });
+    return;
+  }
+  _doSimBowlGame(idx);
+}
+function _doSimBowlGame(idx) {
+  if(!SEASON.bowlGames) return;
+  const game = SEASON.bowlGames[idx];
+  if(!game || game.played) return;
+  const hT = SEASON.teams[game.homeIdx];
+  const aT = SEASON.teams[game.awayIdx];
   const res = simInstant(hT, aT, 'clear');
   game.homeScore = res.homeScore;
   game.awayScore = res.awayScore;
@@ -2532,7 +3777,21 @@ function simPlayoffGame(round, gameIdx) {
   if(!roundObj) return;
   const game = roundObj.games[gameIdx];
   if(!game || game.played || game.homeIdx < 0) return;
-
+  const hT = SEASON.teams[game.homeIdx];
+  const aT = SEASON.teams[game.awayIdx];
+  // Show pre-game modal if this is the player's team
+  if(SEASON.myTeamIdx !== null && SEASON.myTeamIdx !== undefined &&
+    (game.homeIdx === SEASON.myTeamIdx || game.awayIdx === SEASON.myTeamIdx)) {
+    maybeShowPreGameModal(() => { applyPreGameDecision(); _doSimPlayoffGame(round, gameIdx); });
+    return;
+  }
+  _doSimPlayoffGame(round, gameIdx);
+}
+function _doSimPlayoffGame(round, gameIdx) {
+  const roundObj = SEASON.playoffRounds[round];
+  if(!roundObj) return;
+  const game = roundObj.games[gameIdx];
+  if(!game || game.played || game.homeIdx < 0) return;
   const hT = SEASON.teams[game.homeIdx];
   const aT = SEASON.teams[game.awayIdx];
   const res = simInstant(hT, aT, 'random');
@@ -2767,7 +4026,9 @@ function checkOT(){
       }
       const hBS=generateBoxScore(G.home.rating,G.away.rating,G.home.score,G.away.score,G.homeStats,G.home.qScores,G.ot);
       const aBS=generateBoxScore(G.away.rating,G.home.rating,G.away.score,G.home.score,G.awayStats,G.away.qScores,G.ot);
-      G.onDone(G.home.score,G.away.score,hBS,aBS);
+      const cb = G.onDone;
+      G.onDone = null; // prevent double-fire from finishGame
+      cb(G.home.score,G.away.score,hBS,aBS);
     }
   }
 }
@@ -2793,6 +4054,23 @@ function finishGame(){
   }
   stopAuto();
   while(!G.over)nextPlay();
+  // After simming to completion, fire onDone if set (e.g. from playGameInline)
+  if(G.onDone){
+    const totalTOP = G.homeStats.topSeconds + G.awayStats.topSeconds;
+    if(totalTOP > 0){
+      const scale = 3600 / totalTOP;
+      G.homeStats.topSeconds = Math.round(G.homeStats.topSeconds * scale);
+      G.awayStats.topSeconds = 3600 - G.homeStats.topSeconds;
+    } else {
+      G.homeStats.topSeconds = rand(1700,1900);
+      G.awayStats.topSeconds = 3600 - G.homeStats.topSeconds;
+    }
+    const hBS2=generateBoxScore(G.home.rating,G.away.rating,G.home.score,G.away.score,G.homeStats,G.home.qScores,G.ot);
+    const aBS2=generateBoxScore(G.away.rating,G.home.rating,G.away.score,G.home.score,G.awayStats,G.away.qScores,G.ot);
+    const cb = G.onDone;
+    G.onDone = null; // prevent double-fire
+    cb(G.home.score, G.away.score, hBS2, aBS2);
+  }
 }
 
 let autoTimer2=null;
@@ -3153,18 +4431,48 @@ function launchQuickGame(){
 }
 function gameBackAction(){
   stopAuto();
-  if(gameContext&&gameContext.mode==='season'){showScreen('screen-season');renderAllTabs();renderSchedTab(false);}
+  if(gameContext&&gameContext.mode==='season'){
+    // Apply result if game is over and not yet recorded
+    if(G && G.over) {
+      const {weekIdx, gameIdx} = gameContext;
+      const game = SEASON.schedule[weekIdx][gameIdx];
+      if(game && !game.played) {
+        const hBS=generateBoxScore(G.home.rating,G.away.rating,G.home.score,G.away.score,G.homeStats,G.home.qScores,G.ot);
+        const aBS=generateBoxScore(G.away.rating,G.home.rating,G.away.score,G.home.score,G.awayStats,G.away.qScores,G.ot);
+        applyResult(game, G.home.score, G.away.score, hBS, aBS, G.weather);
+        recalcPts(); saveRankings();
+      }
+    }
+    showScreen('screen-season');
+    renderAllTabs(); renderSchedTab(false);
+    // Show all played games this week in results
+    if(G && G.over) {
+      const {weekIdx} = gameContext;
+      const preSimApSnap = SEASON.apRankings[SEASON.apRankings.length-1] || [];
+      const weekGames = SEASON.schedule[weekIdx] || [];
+      const allPlayed = weekGames
+        .filter(g => g.played && g.homeIdx >= 0)
+        .map(g => {
+          const hT = SEASON.teams[g.homeIdx], aT = SEASON.teams[g.awayIdx];
+          return {home:hT, away:aT, homeScore:g.homeScore, awayScore:g.awayScore,
+            rivalry:g.rivalryName, weather:g.weather, attendance:g.attendance,
+            homeRating:hT.base, awayRating:aT.base, apSnap:preSimApSnap};
+        });
+      if(allPlayed.length) renderWeekResults(allPlayed);
+    }
+  }
   else showScreen('screen-quick');
 }
 function startNewSeason(){
   G = null;
   gameContext = null;
+  FRANCHISE = null; // reset franchise for a truly new game
   stopAuto();
   $('week-results').innerHTML = '';
   $('btn-adv-week').style.display = 'none';
   $('btn-replay-week').style.display = 'none';
   $('sim-msg').textContent = 'Ready to simulate Week 1.';
-  initSeason();updateSeasonUI();switchTab('schedule');showScreen('screen-season');
+  initSeason();generateCoaches();showTeamPicker();
 }
 
 
@@ -3186,6 +4494,27 @@ function getPostseasonPhaseLabel(){
 }
 
 function updateSeasonUI(){
+  // My Team button + prestige
+  const myBtn = $('btn-my-team');
+  if(myBtn && SEASON) {
+    myBtn.style.display = 'inline-flex';
+    if(SEASON.myTeamIdx !== null && SEASON.myTeamIdx !== undefined) {
+      const myT = SEASON.teams[SEASON.myTeamIdx];
+      myBtn.textContent = '🏫 ' + (myT ? myT.name : 'My Team');
+      myBtn.style.color = myT ? myT.color : '';
+      myBtn.style.borderColor = myT ? myT.color : '';
+    } else {
+      myBtn.textContent = '🏫 Pick My Team';
+      myBtn.style.color = '';
+      myBtn.style.borderColor = '';
+    }
+  }
+  const pDisp = $('prestige-display');
+  if(pDisp && FRANCHISE && SEASON?.myTeamIdx !== null && SEASON?.myTeamIdx !== undefined) {
+    const pl = getPrestigeLabel(FRANCHISE.prestige||0);
+    pDisp.style.display = 'inline';
+    pDisp.innerHTML = `⭐ <span style="font-weight:700;color:${pl.color};">${FRANCHISE.prestige||0}</span> prestige`;
+  } else if(pDisp) { pDisp.style.display = 'none'; }
   const w=SEASON.week;
   let label;
   if(SEASON.playoffField){
@@ -3202,7 +4531,7 @@ function renderAllTabs(){
 }
 
 function switchTab(tab){
-  // Clear week-results when leaving schedule tab
+  // Clear week-results when leaving schedule tab (but not when going to play screen)
   if(tab !== 'schedule') $('week-results').innerHTML = '';
   ['headlines','rankings','schedule','conferences','standings'].forEach(t=>{
     const el=$(`tab-${t}`); if(el) el.style.display=t===tab?'block':'none';
@@ -4618,10 +5947,11 @@ function renderStandingsTab(){
       const rankStr=rank&&rank<=25?`<span class="badge badge-ap" style="font-size:.55rem;margin-right:5px;">#${rank}</span>`:'';
       const champStr=t.isConfChamp?`<span style="font-size:.55rem;background:#dcfce7;color:#15803d;border:1px solid #86efac;padding:1px 4px;border-radius:3px;margin-left:4px;">CCG</span>`:'';
       const stripe=i%2===1?'background:var(--surface2);':'';
+      const traj=(()=>{if(!FRANCHISE?.programBases||FRANCHISE.programBases[t.idx]===undefined)return'';const newBase=FRANCHISE.programBases[t.idx];const diff=newBase-t.base;if(diff>=2)return'<span style="color:#16a34a;font-size:.65rem;margin-left:4px;">↑</span>';if(diff<=-2)return'<span style="color:#dc2626;font-size:.65rem;margin-left:4px;">↓</span>';return'';})();
       html+=`<tr style="${stripe}cursor:pointer;" onclick="openTeamProfile(${t.idx},'screen-season')" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background='${i%2===1?'var(--surface2)':''}'" >
         <td style="padding:8px 10px;border-bottom:1px solid var(--border);">
           <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${t.color};margin-right:7px;vertical-align:middle;"></span>
-          ${rankStr}<span style="font-family:'Oswald',sans-serif;font-weight:700;letter-spacing:1px;color:var(--ink);">${t.name}</span>
+          ${rankStr}<span style="font-family:'Oswald',sans-serif;font-weight:700;letter-spacing:1px;color:var(--ink);">${t.name}</span>${traj}
           <span style="font-size:.7rem;color:var(--muted);margin-left:6px;">${t.name}</span>${champStr}
         </td>
         <td style="text-align:center;padding:8px;border-bottom:1px solid var(--border);font-family:'Source Code Pro',monospace;font-weight:700;color:var(--ink);">${t.confWins}–${t.confLosses}</td>
@@ -4768,6 +6098,10 @@ function renderSchedTab(resetToCurrentWeek){
     return;
   }
   const sel=$('sched-week-sel');
+  if(!sel) return;
+  // Ensure sched-controls is visible (may have been hidden by postseason)
+  const sc2 = $('sched-controls');
+  if(sc2) sc2.style.display = '';
   const oldVal=sel.value;
   sel.innerHTML='';
   for(let w=1;w<=SEASON.totalWeeks;w++){
@@ -4966,16 +6300,20 @@ function renderPostseasonTab() {
       </div></div>` : '';
 
     // Sim button
+    const _ceLabel = !played && hT && aT ? coachEdgeLabel(hT, aT, null, false, true) : null;
+    const coachEdgeHTML = _ceLabel ? `<div style="padding:2px 10px 4px;font-size:.62rem;color:#7c3aed;font-weight:600;">${_ceLabel.label}</div>` : '';
     const simCall = globalBowlIdx!==undefined ? 'simBowlGame('+globalBowlIdx+');' : 'simPlayoffGame('+roundIdx+','+gameIdx+');';
     const simBtn = !played && hT && aT ? '<div style="padding:7px 10px;border-top:1px solid var(--border);"><button class="btn btn-primary btn-sm" style="width:100%" onclick="event.stopPropagation();'+simCall+'renderSchedTab(false);">⚡ Simulate</button></div>' : '';
 
     const attStr = att && att.attendance ? `<span style="font-size:.6rem;color:var(--muted2);">🏟 ${att.attendance.toLocaleString()} (${fillStrPlain(att.fillPct)})</span>` : '';
+    const coachEdge = !played && hT && aT ? coachEdgeLabel(hT, aT, 'clear', false, true) : null;
+    const coachEdgeStr = coachEdge ? `<span style="font-size:.6rem;background:rgba(37,99,235,.12);color:#2563eb;border:1px solid rgba(37,99,235,.25);padding:1px 6px;border-radius:8px;font-weight:600;">${coachEdge.icon} Coaching Edge +${coachEdge.edge} ${coachEdge.team.name}</span>` : '';
     const wx = played && weather ? ({clear:'☀️',wind:'💨',rain:'🌧️',snow:'❄️'}[weather]||'') : '';
     const views = played && hT && aT ? calcViewership({played,tv,homeScore:hScore,awayScore:aScore,weather}, hT, aT) : null;
     const viewStr = views ? `<span style="font-size:.6rem;font-weight:600;color:var(--muted2);">${views.str}</span>` : '';
 
     return `<div style="background:var(--surface);border:1px solid var(--border);${cfpBorder}${champBorder}border-radius:8px;overflow:hidden;box-shadow:var(--shadow);" ${clickAttr}>
-      ${header}${upsetBanner}
+      ${header}${upsetBanner}${coachEdgeHTML||''}
       <div class="result-item-row${hw?' winner':''}" style="padding:7px 10px;">
         <div style="display:flex;align-items:center;gap:5px;min-width:0;flex:1;">
           ${hT?`<div class="t-dot" style="background:${hT.color};flex-shrink:0;"></div>`:''}
@@ -4991,7 +6329,7 @@ function renderPostseasonTab() {
         <span class="${played?(aw?'result-w':'result-l'):''}" style="font-size:.8rem;flex-shrink:0;">${played?aScore:'—'}</span>
       </div>
       <div class="result-item-footer" style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;">
-        ${wx?`<span style="font-size:.8rem;">${wx}</span>`:''}${attStr}${viewStr}
+        ${wx?`<span style="font-size:.8rem;">${wx}</span>`:''}${coachEdgeStr}${attStr}${viewStr}
         ${tv?`<span style="margin-left:auto;">${tvBadgeHTML(tv,played?null:kickoff)}</span>`:''}
         ${played?('<span style="font-size:.6rem;color:var(--muted2);"'+(tv?'':' style="margin-left:auto;"')+'>📊</span>'):''}
       </div>
@@ -5309,7 +6647,8 @@ function showSchedWeek(w){
             </div>
             <span style="font-size:.72rem;color:var(--muted);flex-shrink:0;">Away</span>
           </div>
-          <div class="result-item-footer" style="display:flex;align-items:center;gap:6px;">${rivalryBadge}${game.tv?tvBadgeHTML(game.tv,game.kickoff):''}${!rivalryBadge&&!game.tv?`<span style="font-size:.62rem;color:var(--muted2);">📍 ${hT.city||''}</span>`:''}${playBtn}</div>
+          <div class="result-item-footer" style="display:flex;align-items:center;gap:6px;">${rivalryBadge}${(()=>{const ce=coachEdgeLabel(hT,aT,game.weather,!!game.rivalryName,false);return ce?`<span style="font-size:.6rem;background:rgba(37,99,235,.12);color:#2563eb;border:1px solid rgba(37,99,235,.25);padding:1px 6px;border-radius:8px;font-weight:600;">${ce.icon} Coaching Edge +${ce.edge} ${ce.team.name}</span>`:''})()}${game.tv?tvBadgeHTML(game.tv,game.kickoff):''}${!rivalryBadge&&!game.tv?`<span style="font-size:.62rem;color:var(--muted2);">📍 ${hT.city||''}</span>`:''}${playBtn}</div>
+          ${(()=>{const ce=coachEdgeLabel(hT,aT,null,!!game.rivalryName,false);return ce?`<div style="padding:3px 10px 5px;font-size:.62rem;color:#7c3aed;font-weight:600;">${ce.label}</div>`:''})()}
         </div>`;
       }
     });
@@ -5323,8 +6662,95 @@ function toggleConfGroup(id){
   el.style.display=el.style.display==='none'?'block':'none';
 }
 
-function winProbability(homeRating, awayRating, homeField=true) {
-  const adj = homeRating + (homeField ? 2.5 : 0) - awayRating;
+
+// ═══════════════════════════════════════════════════════
+// COACH SIM INTEGRATION
+// ═══════════════════════════════════════════════════════
+
+// Style matchup advantage: returns points to add to home, subtract from away
+// Positive = home coach advantage, negative = away coach advantage
+function coachStyleEdge(hCoach, aCoach, weather, isRivalry, isPostseason) {
+  if(!hCoach || !aCoach) return {hEdge:0, aEdge:0, label:null};
+  let hEdge = 0, aEdge = 0;
+  const hStyle = hCoach.style, aStyle = aCoach.style;
+
+  // Style matchup matrix
+  if(hStyle === 'defensive' && aStyle === 'air-raid') hEdge += 7;
+  if(aStyle === 'defensive' && hStyle === 'air-raid') aEdge += 7;
+  if(hStyle === 'defensive' && aStyle === 'run-first') hEdge += 3;
+  if(aStyle === 'defensive' && hStyle === 'run-first') aEdge += 3;
+  if(hStyle === 'air-raid'  && aStyle === 'run-first') hEdge += 2;
+  if(aStyle === 'air-raid'  && hStyle === 'run-first') aEdge += 2;
+
+  // Weather synergy
+  if(weather === 'rain' || weather === 'snow') {
+    if(hStyle === 'run-first') hEdge += 6;
+    if(aStyle === 'run-first') aEdge += 6;
+    if(hStyle === 'air-raid')  hEdge -= 5;
+    if(aStyle === 'air-raid')  aEdge -= 5;
+  }
+  if(weather === 'wind') {
+    if(hStyle === 'air-raid')  hEdge -= 3;
+    if(aStyle === 'air-raid')  aEdge -= 3;
+  }
+
+  // Same-style mirror: pure coach rating decides
+  if(hStyle === aStyle) {
+    const diff = (hCoach.rating - aCoach.rating) * 0.15;
+    hEdge += diff;
+  }
+
+  // Experience gap penalty
+  const expRank = {rookie:0, mid:1, veteran:2, legend:3};
+  const hExp = expRank[hCoach.experience] || 0;
+  const aExp = expRank[aCoach.experience] || 0;
+  if(aExp - hExp >= 2) hEdge -= 3;
+  if(hExp - aExp >= 2) aEdge -= 3;
+
+  // Hot seat pressure penalty (when ranked or big game)
+  if(hCoach.hotSeat && (isRivalry || isPostseason)) hEdge -= 4;
+  if(aCoach.hotSeat && (isRivalry || isPostseason)) aEdge -= 4;
+
+  // Legend upset resistance in big games
+  if(hCoach.experience === 'legend' && (isRivalry || isPostseason)) hEdge += 5;
+  if(aCoach.experience === 'legend' && (isRivalry || isPostseason)) aEdge += 5;
+
+  // Rookie high variance handled in simInstant separately
+  return {hEdge: Math.round(hEdge), aEdge: Math.round(aEdge)};
+}
+
+// Effective rating incorporating coach influence (65% team, 35% coach)
+function effectiveRating(teamRating, coachRating) {
+  if(!coachRating) return teamRating;
+  return Math.round(teamRating * 0.65 + coachRating * 0.35);
+}
+
+// Get coach for a team index
+function getCoach(tIdx) {
+  return (SEASON && SEASON.coaches) ? SEASON.coaches[tIdx] : null;
+}
+
+// Coaching edge label for UI
+function coachEdgeLabel(hT, aT, weather, isRivalry, isPostseason) {
+  const hC = getCoach(hT.idx), aC = getCoach(aT.idx);
+  if(!hC || !aC) return null;
+  const {hEdge, aEdge} = coachStyleEdge(hC, aC, weather||'clear', isRivalry, isPostseason);
+  const netEdge = hEdge - aEdge;
+  if(Math.abs(netEdge) < 3) return null; // too small to show
+  const favTeam = netEdge > 0 ? hT : aT;
+  const absEdge = Math.abs(netEdge);
+  const icon = absEdge >= 8 ? '🔥' : absEdge >= 5 ? '📋' : '📋';
+  return {team: favTeam, edge: absEdge, icon,
+    label: `${icon} Coaching Edge +${absEdge} ${favTeam.name}`};
+}
+
+function winProbability(homeRating, awayRating, homeField=true, hCoach=null, aCoach=null, weather='clear', isRivalry=false, isPostseason=false) {
+  // Apply coach effective rating
+  const hEff = effectiveRating(homeRating, hCoach?.rating);
+  const aEff = effectiveRating(awayRating, aCoach?.rating);
+  // Style matchup edge
+  const {hEdge, aEdge} = coachStyleEdge(hCoach, aCoach, weather, isRivalry, isPostseason);
+  const adj = (hEff + hEdge) + (homeField ? 2.5 : 0) - (aEff + aEdge);
   return 1 / (1 + Math.exp(-adj / 8));
 }
 
@@ -5466,11 +6892,17 @@ function renderSimTab(){
         $('btn-sim-week').textContent='🏆 Season Complete';
         $('sim-msg').textContent=SEASON.champion?`Champion: ${SEASON.champion.name}`:'Season complete';
         if(!SEASON.psPhase || SEASON.psPhase < 4) { SEASON.psPhase=4; updateSeasonUI(); }
+        $('btn-adv-week').style.display='inline-flex';
+        $('btn-adv-week').textContent='🎬 Begin Off-Season';
+        $('btn-adv-week').onclick=()=>beginOffSeason();
       }
     } else {
       $('btn-sim-week').disabled=true;
       $('btn-sim-week').textContent='🏆 Season Complete';
       $('sim-msg').textContent=SEASON.champion?`Champion: ${SEASON.champion.name}`:'Postseason complete';
+      $('btn-adv-week').style.display='inline-flex';
+      $('btn-adv-week').textContent='🎬 Begin Off-Season';
+      $('btn-adv-week').onclick=()=>beginOffSeason();
     }
     return;
   } catch(e) { document.body.insertAdjacentHTML('afterbegin','<div style="position:fixed;top:0;left:0;right:0;background:darkred;color:#fff;padding:8px;z-index:99999;font-size:11px;word-break:break-all;"><b>renderSimTab</b>: '+e.message+' | '+(e.stack||'').replace(/\n/g,'|').slice(0,300)+'</div>'); return; }
@@ -5515,21 +6947,30 @@ function playGameInline(weekIdx, gameIdx){
   const game=SEASON.schedule[weekIdx][gameIdx];
   if(!game||game.played||game.homeIdx<0)return;
   const home=SEASON.teams[game.homeIdx], away=SEASON.teams[game.awayIdx];
-  const preSimApSnap = (SEASON.apRankings[SEASON.apRankings.length-1]||[]).slice();
+
+  // Show pre-game modal if this is the player's team game
+  const isMyGame = SEASON.myTeamIdx !== null && SEASON.myTeamIdx !== undefined &&
+    (game.homeIdx === SEASON.myTeamIdx || game.awayIdx === SEASON.myTeamIdx);
+
+  if(isMyGame) {
+    maybeShowPreGameModal(() => _doPlayGameInline(weekIdx, gameIdx));
+    return;
+  }
+  _doPlayGameInline(weekIdx, gameIdx);
+}
+
+function _doPlayGameInline(weekIdx, gameIdx){
+  if(!SEASON)return;
+  const w=weekIdx+1;
+  const game=SEASON.schedule[weekIdx][gameIdx];
+  if(!game||game.played||game.homeIdx<0)return;
+  const home=SEASON.teams[game.homeIdx], away=SEASON.teams[game.awayIdx];
+  applyPreGameDecision(); // apply any decisions from the modal
   gameContext={mode:'season',weekIdx,gameIdx};
   $('game-ctx-lbl').textContent=`${w===13?'CCG':('Wk '+w)}: ${home.name} vs ${away.name}`;
   $('game-location-lbl').textContent=home.city?'📍 '+home.city:'';
   showScreen('screen-game');
-  initGame(home,away,'random',(hs,as_,hBS,aBS)=>{
-    applyResult(game,hs,as_,hBS,aBS);
-    recalcPts();saveRankings();
-    // Push this result into week-results with updated records
-    renderWeekResults([{home, away, homeScore:hs, awayScore:as_, rivalry:game.rivalryName,
-      weather:game.weather, attendance:game.attendance, homeRating:home.base, awayRating:away.base, apSnap:preSimApSnap}]);
-    renderAllTabs();renderSchedTab(false);
-    $('btn-fin').textContent='📊 Box Score';
-    $('btn-fin').onclick=()=>openBoxScore(home,away,hs,as_,{home:hBS,away:aBS},home.city,game.attendance);
-  });
+  initGame(home,away,'random',null);
 }
 
 function upsetLevel(r, apSnap) {
@@ -6589,6 +8030,31 @@ function openMatchupPreview(weekIdx, gameIdx){
       </div>
     </div>
 
+    <!-- Coaching edge + info -->
+    ${(()=>{
+      const hC=SEASON.coaches?.[hT.idx], aC=SEASON.coaches?.[aT.idx];
+      if(!hC||!aC) return '';
+      const ce=coachEdgeLabel(hT,aT,null,!!game.rivalryName,false);
+      const ceHtml=ce?`<div style="text-align:center;margin-bottom:8px;font-size:.68rem;color:#7c3aed;font-weight:600;">${ce.label}</div>`:'';
+      return `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:12px;">
+        <div style="font-family:'Oswald',sans-serif;font-size:.63rem;letter-spacing:3px;text-transform:uppercase;color:var(--muted);text-align:center;margin-bottom:8px;">Coaching Matchup</div>
+        ${ceHtml}
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
+          <div style="flex:1;text-align:left;">
+            <div style="font-size:.7rem;font-weight:700;color:var(--ink);">Coach ${hC.name}</div>
+            <div style="font-size:.62rem;color:var(--muted);margin-top:2px;">${COACH_STYLE_EMOJI[hC.style]} ${COACH_STYLE_LABELS[hC.style]}${hC.hotSeat?' 🔥':''}</div>
+            <div style="font-size:.62rem;color:var(--muted);">Rating: <span style="font-weight:700;color:var(--ink);">${hC.rating}</span></div>
+          </div>
+          <div style="font-size:.7rem;color:var(--muted);padding-top:4px;">vs</div>
+          <div style="flex:1;text-align:right;">
+            <div style="font-size:.7rem;font-weight:700;color:var(--ink);">Coach ${aC.name}</div>
+            <div style="font-size:.62rem;color:var(--muted);margin-top:2px;">${COACH_STYLE_EMOJI[aC.style]} ${COACH_STYLE_LABELS[aC.style]}${aC.hotSeat?' 🔥':''}</div>
+            <div style="font-size:.62rem;color:var(--muted);">Rating: <span style="font-weight:700;color:var(--ink);">${aC.rating}</span></div>
+          </div>
+        </div>
+      </div>`;
+    })()}
+
     <!-- Win probability -->
     <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:12px;">
       <div style="font-family:'Oswald',sans-serif;font-size:.65rem;letter-spacing:3px;text-transform:uppercase;color:var(--muted);text-align:center;margin-bottom:8px;">Win Probability</div>
@@ -6717,6 +8183,9 @@ function openTeamProfile(tIdx, returnScreen){
       </div>
     </div>
   </div>`;
+
+  renderCoachPanel(tIdx);
+  renderFranchiseHistory(tIdx);
 
   // Rank chart (AP over time)
   const rankHistory=SEASON.apRankings.map(snap=>getRank(tIdx,snap)||26);
