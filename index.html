@@ -2269,40 +2269,39 @@ function applyPreGameDecision() {
   const myC=SEASON.coaches?.[SEASON.myTeamIdx];
   if(!myT) return;
   let ratingMod=0;
-  // Game plan — always a net positive choice (no penalties for mismatches)
+  // Game plan — synergy with coach style gives extra boost
   if(d.gamePlan==='aggressive') {
-    ratingMod += myC?.style==='air-raid' ? 5 : 3;
-    myT._decisionVariance = 12;
+    ratingMod += myC?.style==='air-raid' ? 10 : 7;
+    myT._decisionVariance = 14;
   } else if(d.gamePlan==='conservative') {
-    ratingMod += (myC?.style==='run-first'||myC?.style==='defensive') ? 5 : 3;
-    myT._decisionVariance = 4;
+    ratingMod += (myC?.style==='run-first'||myC?.style==='defensive') ? 10 : 7;
+    myT._decisionVariance = 5;
   } else {
-    // Balanced: small consistent boost
-    ratingMod += 2;
-    myT._decisionVariance = 6;
+    ratingMod += 6;
+    myT._decisionVariance = 8;
   }
-  // Target — all options give a boost, good matchups give more
+  // Target — good matchup awareness gives extra boost
   const w=SEASON.week; const games=SEASON.schedule[w-1]||[];
   const gi=games.findIndex(g=>(g.homeIdx===SEASON.myTeamIdx||g.awayIdx===SEASON.myTeamIdx)&&!g.played&&g.homeIdx>=0);
   if(gi>=0) {
     const game=games[gi]; const oppIdx=game.homeIdx===SEASON.myTeamIdx?game.awayIdx:game.homeIdx;
     const oppC=SEASON.coaches?.[oppIdx];
-    if(d.target==='their-offense') ratingMod += oppC?.style==='air-raid' ? 4 : 2;
-    if(d.target==='neutral')       ratingMod += 2;
-    if(d.target==='their-defense') ratingMod += myC?.style==='air-raid'||myC?.style==='run-first' ? 4 : 2;
+    if(d.target==='their-offense') ratingMod += oppC?.style==='air-raid' ? 8 : 5;
+    if(d.target==='neutral')       ratingMod += 5;
+    if(d.target==='their-defense') ratingMod += myC?.style==='air-raid'||myC?.style==='run-first' ? 8 : 5;
   }
-  // Motivation — all positive, fired-up adds variance
-  if(d.motivation==='fired-up') { myT._decisionVariance=(myT._decisionVariance||0)+8; ratingMod+=1; }
-  if(d.motivation==='steady')   ratingMod+=3;
-  if(d.motivation==='normal')   ratingMod+=1;
+  // Motivation
+  if(d.motivation==='fired-up') { myT._decisionVariance=(myT._decisionVariance||0)+10; ratingMod+=4; }
+  if(d.motivation==='steady')   ratingMod+=7;
+  if(d.motivation==='normal')   ratingMod+=4;
   // Health
-  if(d.health==='push') ratingMod+=3;
-  if(d.health==='normal') ratingMod+=1;
-  if(d.health==='rest')  ratingMod-=1; // small cost, not punishing
+  if(d.health==='push')   ratingMod+=7;
+  if(d.health==='normal') ratingMod+=4;
+  if(d.health==='rest')   ratingMod+=1;
   // Inspire: +20 flat boost, record use (max 2 per season)
   if(d.inspire && (SEASON.inspireUsed||[]).length < 2) {
     if(!SEASON.inspireUsed) SEASON.inspireUsed = [];
-    ratingMod += 20;
+    ratingMod += 50;
     myT._decisionVariance = (myT._decisionVariance||0) + 5;
     const w=SEASON.week;
     const games2=SEASON.schedule[w-1]||[];
@@ -3430,6 +3429,10 @@ function replayWeek() {
     $('week-results').innerHTML = '';
     $('btn-adv-week').style.display = 'none';
     $('sim-msg').textContent = `Week ${w} cleared — ready to replay.`;
+    // Restore inspire uses that were spent this week
+    if(SEASON.inspireUsed && SEASON.inspireUsed.length) {
+      SEASON.inspireUsed = SEASON.inspireUsed.filter(u => u.week !== w);
+    }
     updateSeasonUI();
     renderSchedTab(false);
     populatePlayGameSel();
