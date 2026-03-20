@@ -2168,7 +2168,7 @@ function maybeShowPreGameModal(onConfirm) {
         <span style="color:var(--muted2);">(${oppT.rating})</span>
         <span>·</span>
         <span>WIN PROB</span>
-        <span style="font-weight:700;color:${wpColor};">${myWinPct}%</span>
+        <span id="pregame-wp-val" style="font-weight:700;color:${wpColor};">${myWinPct}%</span>
       </div>
       ${myC?`<div style="font-size:.67rem;color:var(--muted);margin-bottom:8px;">${styleEmoji} Coach ${myC.name} · ${styleLabel}${myC.hotSeat?' 🔥':''}</div>`:''}
       ${ceHtml}
@@ -2232,6 +2232,7 @@ function maybeShowPreGameModal(onConfirm) {
       </div>
     </div>`;
   window._pgCb = onConfirm;
+  window._pgData = {myT, oppT, isHome, myC, oppC, game};
   $('modal-overlay').classList.add('open');
 }
 
@@ -2242,6 +2243,7 @@ function selectPreGameOpt(btn, field) {
   btn.style.background='var(--navy)'; btn.style.borderColor='var(--navy)'; btn.style.color='#fff';
   if(!SEASON.preGameDecision) SEASON.preGameDecision={};
   SEASON.preGameDecision[btn.dataset.field]=btn.dataset.val;
+  updatePreGameWinProb();
 }
 
 function confirmPreGameDecision(onConfirm) {
@@ -2255,6 +2257,7 @@ function toggleInspire() {
   if((SEASON.inspireUsed||[]).length >= 2) return;
   if(!SEASON.preGameDecision) SEASON.preGameDecision = {};
   SEASON.preGameDecision.inspire = !SEASON.preGameDecision.inspire;
+  updatePreGameWinProb();
   // Re-render just the inspire button
   const btn = $('inspire-btn');
   if(!btn) return;
@@ -2327,6 +2330,41 @@ function applyPreGameDecision() {
   }
   myT._preGameRatingMod=ratingMod;
   SEASON.preGameDecision=null;
+}
+
+function calcPreGameRatingMod(d) {
+  if(!d||!window._pgData) return 0;
+  const {myC,oppC} = window._pgData;
+  let mod=0;
+  if(d.gamePlan==='aggressive')    mod += myC?.style==='air-raid' ? 10 : 7;
+  else if(d.gamePlan==='conservative') mod += (myC?.style==='run-first'||myC?.style==='defensive') ? 10 : 7;
+  else if(d.gamePlan)              mod += 6;
+  if(d.target==='their-offense')   mod += oppC?.style==='air-raid' ? 8 : 5;
+  else if(d.target==='neutral')    mod += 5;
+  else if(d.target==='their-defense') mod += myC?.style==='air-raid'||myC?.style==='run-first' ? 8 : 5;
+  if(d.motivation==='fired-up')    mod += 4;
+  else if(d.motivation==='steady') mod += 7;
+  else if(d.motivation==='normal') mod += 4;
+  if(d.health==='push')   mod += 7;
+  else if(d.health==='normal') mod += 4;
+  else if(d.health==='rest')   mod += 1;
+  if(d.inspire && (SEASON.inspireUsed||[]).length < 2) mod += 50;
+  return mod;
+}
+
+function updatePreGameWinProb() {
+  const el = document.getElementById('pregame-wp-val');
+  if(!el||!window._pgData) return;
+  const {myT,oppT,isHome,myC,oppC,game} = window._pgData;
+  const mod = calcPreGameRatingMod(SEASON.preGameDecision||{});
+  const myAdj = myT.rating + mod;
+  const rawWP = winProbability(
+    isHome?myAdj:oppT.rating, isHome?oppT.rating:myAdj,
+    true, isHome?myC:oppC, isHome?oppC:myC,
+    game.weather||'clear', !!game.rivalryName, false);
+  const pct = Math.round((isHome?rawWP:1-rawWP)*100);
+  el.textContent = pct+'%';
+  el.style.color = pct>=65?'#16a34a':pct>=45?'#d97706':'#dc2626';
 }
 
 
