@@ -2157,6 +2157,8 @@ function maybeShowPreGameModal(onConfirm, gameOverride) {
     </div>`;
   }
 
+  $('modal-title').textContent = 'Pre-Game Decisions';
+  $('modal-location').textContent = isHome ? `📍 ${myT.city}` : `📍 @ ${oppT.city}`;
   $('modal-body').innerHTML=`
     <div style="padding:4px 0;">
       <div style="font-family:'Oswald',sans-serif;font-size:.63rem;letter-spacing:3px;color:var(--muted);margin-bottom:6px;">PRE-GAME DECISIONS</div>
