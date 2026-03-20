@@ -1057,10 +1057,12 @@ function initSeason() {
     const variation = randNorm(0, 6);
     const rating = clamp(t.base + variation, t.base - 10, t.base + 10);
     const sd = STADIUM_DATA[t.name] || {stadium:'On-Campus Stadium', capacity:25000};
+    const finalRating = clamp(rating, 55, 99);
     return {
       ...t,
       idx: i,
-      rating: clamp(rating, 55, 99),
+      rating: finalRating,
+      ratingStart: finalRating, // baseline for end-of-season drift calc
       wins: 0, losses: 0, confWins: 0, confLosses: 0,
       pointsFor: 0, pointsAgainst: 0,
       selloutStreak: 0,
@@ -2550,6 +2552,11 @@ function applyProgramDrift() {
     if(t.isConfChamp) drift += 2;
     if(SEASON.playoffField?.find(e => e.teamIdx === t.idx)) drift += 2;
     if(SEASON.champion?.idx === t.idx) drift += 1;
+    // Carry 30% of in-season dynamic rating movement into next season's base.
+    // A team that proved itself better/worse than its preseason rating gets
+    // some of that movement baked in for year 2+.
+    const ratingDelta = t.rating - (t.ratingStart ?? t.base);
+    drift += Math.round(ratingDelta * 0.3);
     // Apply drift with tradition floor and ceiling
     const currentBase = FRANCHISE.programBases[t.idx] ?? t.base;
     const newBase = Math.max(floor, Math.min(99, currentBase + drift));
@@ -3350,6 +3357,22 @@ function fillStr(pct){ return pct > 100 ? `${pct}% <span style="color:#16a34a;fo
 function fillStrPlain(pct){ return pct > 100 ? `${pct}% SRO` : `${pct}%`; }
 function recStr(t){ return t ? '<span style="font-size:.63rem;color:var(--muted);font-weight:400;"> ('+t.wins+'-'+t.losses+')</span>' : ''; }
 
+// ── Dynamic in-season rating adjustment (Elo-style) ──────────────
+// Called after every game. Winning when expected → small/no change.
+// Upsets → bigger swing. Margin of victory amplifies the adjustment.
+function applyGameRatingAdjustment(hT, aT, homeScore, awayScore) {
+  const K = 2;
+  const diff = hT.rating - aT.rating;
+  const homeExp = 1 / (1 + Math.exp(-diff / 10));
+  const homeWon = homeScore > awayScore ? 1 : 0;
+  const margin = Math.abs(homeScore - awayScore);
+  const mf = Math.min(2.0, 1 + margin / 28); // 1.0x at 0 pts → 2.0x at 28+ pts
+  const adj = Math.round(K * (homeWon - homeExp) * mf);
+  if(adj === 0) return;
+  hT.rating = clamp(hT.rating + adj, 45, 99);
+  aT.rating = clamp(aT.rating - adj, 45, 99);
+}
+
 function applyResult(game, hs, as_, hBS, aBS, weather) {
   // Idempotent: if already applied, do nothing
   if(game.played) return;
@@ -3422,6 +3445,7 @@ function applyResult(game, hs, as_, hBS, aBS, weather) {
   }
   accumStats(hT, hBS, aBS);
   accumStats(aT, aBS, hBS);
+  applyGameRatingAdjustment(hT, aT, hs, as_);
 }
 
 function advanceWeek() {
@@ -3663,6 +3687,8 @@ function _doSimBowlGame(idx) {
   if(res.homeScore > res.awayScore) { hT.wins++; aT.losses++; }
   else { aT.wins++; hT.losses++; }
 
+  applyGameRatingAdjustment(hT, aT, res.homeScore, res.awayScore);
+
   // AP ranking nudge (bowl games only affect AP, and only slightly)
   applyBowlRankingNudge(game, hT, aT);
 
@@ -3877,6 +3903,8 @@ function _doSimPlayoffGame(round, gameIdx) {
   game.awayScore = res.awayScore;
   game.played = true;
   game.boxScore = {home: res.homeBS, away: res.awayBS};
+
+  applyGameRatingAdjustment(hT, aT, res.homeScore, res.awayScore);
 
   const winner = res.homeScore > res.awayScore ? hT : aT;
 
