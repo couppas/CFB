@@ -2248,15 +2248,18 @@ function toggleInspire() {
   const isSelected = SEASON.preGameDecision.inspire;
   btn.style.border = `2px solid ${isSelected?'#f59e0b':'var(--border)'}`;
   btn.style.background = isSelected ? 'linear-gradient(135deg,#78350f22,#f59e0b22)' : 'var(--surface2)';
+  const inspireArr2 = SEASON.inspireUsed || [];
+  const usesLeft2 = 2 - inspireArr2.length;
   btn.innerHTML = `
     <div style="display:flex;align-items:center;gap:10px;">
       <span style="font-size:1.4rem;">⚡</span>
       <div style="flex:1;">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:2px;">
           <span style="font-family:'Oswald',sans-serif;font-size:.82rem;font-weight:700;color:${isSelected?'#f59e0b':'var(--ink)'};">INSPIRE THE TEAM</span>
-          <span style="font-size:.55rem;background:${isSelected?'#f59e0b':'var(--muted)'};color:#fff;padding:1px 5px;border-radius:4px;font-weight:700;letter-spacing:1px;">ONCE PER SEASON</span>
+          <span style="font-size:.55rem;background:${isSelected?'#f59e0b':'var(--muted)'};color:#fff;padding:1px 5px;border-radius:4px;font-weight:700;letter-spacing:1px;">${usesLeft2} USE${usesLeft2!==1?'S':''} LEFT</span>
         </div>
         <div style="font-size:.63rem;color:var(--muted);">+20 rating boost · Electric atmosphere · ${isSelected?'<span style="color:#f59e0b;font-weight:700;">ACTIVATED</span>':'Tap to activate'}</div>
+        ${inspireArr2.length?`<div style="font-size:.6rem;color:var(--muted2);margin-top:2px;">Used: ${inspireArr2.map(u=>'Wk '+u.week+' vs '+u.oppName).join(' · ')}</div>`:''}
       </div>
       ${isSelected?'<span style="font-size:1.2rem;">✓</span>':''}
     </div>`;
