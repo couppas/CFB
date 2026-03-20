@@ -1879,7 +1879,7 @@ function simInstant(homeT, awayT, weather) {
     if(g.qtr>4) break;
     const off=g[g.pos],def=g[g.pos==='home'?'away':'home'];
     const offS=g.pos==='home'?g.homeStats:g.awayStats;
-    const adv=1+(off.rating-def.rating)*0.004;
+    const adv=1+(off.rating-def.rating)*0.008;
     // 4th down decisions
     if(g.down===4){
       const dist=100-g.yd,fgy=dist+17;
@@ -1907,7 +1907,7 @@ function simInstant(homeT, awayT, weather) {
       const r=Math.random();
       yds=r<.15?rand(-3,0):r<.55?rand(1,5):r<.80?rand(5,10):rand(10,18);
       if(Math.random()<.06*adv)yds=rand(15,42);
-      yds=Math.round(yds);
+      if(yds>0)yds=Math.round(yds*adv);else yds=Math.round(yds);
       offS.rushYards+=Math.max(0,yds);
     }
     offS.topSeconds+=playClock;
@@ -2162,13 +2162,16 @@ function maybeShowPreGameModal(onConfirm) {
         <span style="font-family:'Oswald',sans-serif;font-size:.95rem;font-weight:700;">${oppT.name}</span>
         <span style="font-size:.72rem;color:var(--muted);">(${oppT.wins}-${oppT.losses})</span>
       </div>
-      <div style="font-size:.63rem;color:var(--muted);margin-bottom:8px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-        <span>OPP STRENGTH</span>
-        <span style="font-weight:700;color:${oppRatingColor};">${oppRatingLabel}</span>
-        <span style="color:var(--muted2);">(${oppT.rating})</span>
-        <span>·</span>
-        <span>WIN PROB</span>
-        <span id="pregame-wp-val" style="font-weight:700;color:${wpColor};">${myWinPct}%</span>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap;">
+        <div style="font-size:.63rem;color:var(--muted);display:flex;align-items:center;gap:5px;">
+          <span>OPP STRENGTH</span>
+          <span style="font-weight:700;color:${oppRatingColor};">${oppRatingLabel}</span>
+          <span style="color:var(--muted2);">(${oppT.rating})</span>
+        </div>
+        <div style="margin-left:auto;display:flex;flex-direction:column;align-items:flex-end;">
+          <div style="font-size:.55rem;font-weight:700;letter-spacing:1.5px;color:var(--muted);text-transform:uppercase;margin-bottom:1px;">Win Probability</div>
+          <div id="pregame-wp-val" style="font-family:'Oswald',sans-serif;font-size:1.6rem;font-weight:700;line-height:1;color:${wpColor};">${myWinPct}%</div>
+        </div>
       </div>
       ${myC?`<div style="font-size:.67rem;color:var(--muted);margin-bottom:8px;">${styleEmoji} Coach ${myC.name} · ${styleLabel}${myC.hotSeat?' 🔥':''}</div>`:''}
       ${ceHtml}
@@ -2320,7 +2323,7 @@ function applyPreGameDecision() {
   // Inspire: +20 flat boost, record use (max 2 per season)
   if(d.inspire && (SEASON.inspireUsed||[]).length < 2) {
     if(!SEASON.inspireUsed) SEASON.inspireUsed = [];
-    ratingMod += 50;
+    ratingMod += 20;
     myT._decisionVariance = (myT._decisionVariance||0) + 5;
     const w=SEASON.week;
     const games2=SEASON.schedule[w-1]||[];
@@ -2348,7 +2351,7 @@ function calcPreGameRatingMod(d) {
   if(d.health==='push')   mod += 7;
   else if(d.health==='normal') mod += 4;
   else if(d.health==='rest')   mod += 1;
-  if(d.inspire && (SEASON.inspireUsed||[]).length < 2) mod += 50;
+  if(d.inspire && (SEASON.inspireUsed||[]).length < 2) mod += 20;
   return mod;
 }
 
@@ -6824,7 +6827,7 @@ function winProbability(homeRating, awayRating, homeField=true, hCoach=null, aCo
   // Style matchup edge
   const {hEdge, aEdge} = coachStyleEdge(hCoach, aCoach, weather, isRivalry, isPostseason);
   const adj = (hEff + hEdge) + (homeField ? 2.5 : 0) - (aEff + aEdge);
-  return 1 / (1 + Math.exp(-adj / 8));
+  return 1 / (1 + Math.exp(-adj / 10));
 }
 
 function tvBadgeHTML(tv, kickoff) {
