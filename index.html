@@ -2106,13 +2106,18 @@ function skipTeamPick() {
   if(!$('screen-season').classList.contains('active')) { switchTab('schedule');showScreen('screen-season'); }
 }
 
-function maybeShowPreGameModal(onConfirm) {
+function maybeShowPreGameModal(onConfirm, gameOverride) {
   if(SEASON.myTeamIdx===null||SEASON.myTeamIdx===undefined) { onConfirm(); return; }
-  const w=SEASON.week;
-  const games=SEASON.schedule[w-1]||[];
-  const gi=games.findIndex(g=>(g.homeIdx===SEASON.myTeamIdx||g.awayIdx===SEASON.myTeamIdx)&&!g.played&&g.homeIdx>=0);
-  if(gi<0) { onConfirm(); return; }
-  const game=games[gi];
+  let game;
+  if(gameOverride) {
+    game = gameOverride;
+  } else {
+    const w=SEASON.week;
+    const games=SEASON.schedule[w-1]||[];
+    const gi=games.findIndex(g=>(g.homeIdx===SEASON.myTeamIdx||g.awayIdx===SEASON.myTeamIdx)&&!g.played&&g.homeIdx>=0);
+    if(gi<0) { onConfirm(); return; }
+    game=games[gi];
+  }
   const myIdx=SEASON.myTeamIdx;
   const isHome=game.homeIdx===myIdx;
   const myT=SEASON.teams[myIdx];
@@ -3637,7 +3642,7 @@ function simBowlGame(idx) {
   // Show pre-game modal if this is the player's team
   if(SEASON.myTeamIdx !== null && SEASON.myTeamIdx !== undefined &&
     (game.homeIdx === SEASON.myTeamIdx || game.awayIdx === SEASON.myTeamIdx)) {
-    maybeShowPreGameModal(() => { applyPreGameDecision(); _doSimBowlGame(idx); });
+    maybeShowPreGameModal(() => { applyPreGameDecision(); _doSimBowlGame(idx); }, game);
     return;
   }
   _doSimBowlGame(idx);
@@ -3855,7 +3860,7 @@ function simPlayoffGame(round, gameIdx) {
   // Show pre-game modal if this is the player's team
   if(SEASON.myTeamIdx !== null && SEASON.myTeamIdx !== undefined &&
     (game.homeIdx === SEASON.myTeamIdx || game.awayIdx === SEASON.myTeamIdx)) {
-    maybeShowPreGameModal(() => { applyPreGameDecision(); _doSimPlayoffGame(round, gameIdx); });
+    maybeShowPreGameModal(() => { applyPreGameDecision(); _doSimPlayoffGame(round, gameIdx); }, game);
     return;
   }
   _doSimPlayoffGame(round, gameIdx);
