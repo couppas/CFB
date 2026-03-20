@@ -2124,6 +2124,11 @@ function maybeShowPreGameModal(onConfirm) {
   const ceHtml=ceResult?`<div style="font-size:.65rem;color:#7c3aed;font-weight:600;margin-bottom:10px;">${ceResult.label}</div>`:'';
   const styleLabel=myC?COACH_STYLE_LABELS[myC.style]:'Unknown';
   const styleEmoji=myC?COACH_STYLE_EMOJI[myC.style]:'⚖️';
+  const oppRatingColor=oppT.rating>=85?'#16a34a':oppT.rating>=70?'#2563eb':oppT.rating>=55?'#d97706':'#dc2626';
+  const oppRatingLabel=oppT.rating>=85?'Elite':oppT.rating>=70?'Strong':oppT.rating>=55?'Average':'Below Avg';
+  const rawWP=winProbability(isHome?myT.rating:oppT.rating,isHome?oppT.rating:myT.rating,true,isHome?myC:oppC,isHome?oppC:myC,game.weather||'clear',!!game.rivalryName,false);
+  const myWinPct=Math.round((isHome?rawWP:1-rawWP)*100);
+  const wpColor=myWinPct>=65?'#16a34a':myWinPct>=45?'#d97706':'#dc2626';
   const planHint={balanced:'Balanced works with any game plan.',
     'air-raid':'Aggressive suits your Air Raid system (+3 boost).',
     'run-first':'Conservative suits your Run-First system (+3 boost).',
@@ -2156,6 +2161,14 @@ function maybeShowPreGameModal(onConfirm) {
         <div style="width:10px;height:10px;border-radius:50%;background:${oppT.color};flex-shrink:0;"></div>
         <span style="font-family:'Oswald',sans-serif;font-size:.95rem;font-weight:700;">${oppT.name}</span>
         <span style="font-size:.72rem;color:var(--muted);">(${oppT.wins}-${oppT.losses})</span>
+      </div>
+      <div style="font-size:.63rem;color:var(--muted);margin-bottom:8px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+        <span>OPP STRENGTH</span>
+        <span style="font-weight:700;color:${oppRatingColor};">${oppRatingLabel}</span>
+        <span style="color:var(--muted2);">(${oppT.rating})</span>
+        <span>·</span>
+        <span>WIN PROB</span>
+        <span style="font-weight:700;color:${wpColor};">${myWinPct}%</span>
       </div>
       ${myC?`<div style="font-size:.67rem;color:var(--muted);margin-bottom:8px;">${styleEmoji} Coach ${myC.name} · ${styleLabel}${myC.hotSeat?' 🔥':''}</div>`:''}
       ${ceHtml}
