@@ -2110,6 +2110,7 @@ function skipTeamPick() {
 
 function maybeShowPreGameModal(onConfirm, gameOverride) {
   if(SEASON.myTeamIdx===null||SEASON.myTeamIdx===undefined) { onConfirm(); return; }
+  SEASON.preGameDecision = null; // clear stale decisions from any previous game
   let game;
   if(gameOverride) {
     game = gameOverride;
@@ -3112,7 +3113,7 @@ function simWeekAll() {
     const hasMyGame = games.some(g =>
       (g.homeIdx===SEASON.myTeamIdx||g.awayIdx===SEASON.myTeamIdx) && !g.played && g.homeIdx>=0
     );
-    if(hasMyGame) { maybeShowPreGameModal(()=>_doSimWeekAll()); return; }
+    if(hasMyGame) { maybeShowPreGameModal(()=>{ applyPreGameDecision(); _doSimWeekAll(); }); return; }
   }
   _doSimWeekAll();
 }
