@@ -40,7 +40,7 @@
   --shadow:0 1px 3px rgba(0,0,0,.4),0 1px 6px rgba(0,0,0,.25);
   --shadow-md:0 4px 16px rgba(0,0,0,.5),0 2px 6px rgba(0,0,0,.35);
 }
-[data-theme="light"] body{background:#f0f2f5 !important;color:#111827 !important;}
+[data-theme="light"] body{background-color:#f0f2f5 !important;color:#111827 !important;}
 [data-theme="light"] .header-title{color:#111827 !important;}
 [data-theme="light"] .tab{color:#111827 !important;}
 [data-theme="light"] .tab.active{color:#111827 !important;border-bottom-color:#1e3a6e !important;}
@@ -8186,7 +8186,7 @@ function openBoxScore(homeTeam, awayTeam, homeScore, awayScore, boxScore, locati
     const seasonLabel = FRANCHISE?.seasonNumber ? `Season ${FRANCHISE.seasonNumber}` : '';
     return `<div style="text-align:center;padding:7px 14px;background:linear-gradient(90deg,#fef3c7,#fffbeb,#fef3c7);border-bottom:1px solid #fcd34d;">
       <div style="font-size:.65rem;font-weight:700;color:#92400e;letter-spacing:1px;">🏆 ${game.rivalryName}</div>
-      <div style="font-size:.6rem;color:#a16207;margin-top:2px;"><strong>${winner.name}</strong> hold the trophy${seasonLabel ? ` · ${seasonLabel}` : ''}</div>
+      <div style="font-size:.6rem;color:#a16207;margin-top:2px;"><strong>${winner.name}</strong> holds the trophy${seasonLabel ? ` · ${seasonLabel}` : ''}</div>
     </div>`;
   })() : '';
 
