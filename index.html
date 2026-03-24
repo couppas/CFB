@@ -2048,8 +2048,9 @@ function simInstant(homeT, awayT, weather) {
   // Variance mod: positive = more volatile (bigger swings), applied as random ±
   // but only kicks in to HELP when team is performing well (above 50% win prob baseline)
   // Simpler: just use it as extra noise on top of the rating for high-stakes games
-  const hVarMod = (SEASON?.myTeamIdx === homeT.idx && homeT._decisionVariance) ? (Math.random() * homeT._decisionVariance * 0.4) : 0;
-  const aVarMod = (SEASON?.myTeamIdx === awayT.idx && awayT._decisionVariance) ? (Math.random() * awayT._decisionVariance * 0.4) : 0;
+  // Variance is bidirectional — aggressive/fired-up can swing either way
+  const hVarMod = (SEASON?.myTeamIdx === homeT.idx && homeT._decisionVariance) ? ((Math.random()-0.5) * homeT._decisionVariance * 0.7) : 0;
+  const aVarMod = (SEASON?.myTeamIdx === awayT.idx && awayT._decisionVariance) ? ((Math.random()-0.5) * awayT._decisionVariance * 0.7) : 0;
   const hEffRating = clamp(effectiveRating(homeT.rating, hCoach?.rating) + homeFieldBonus + hEdge + rookieVar(hCoach) + hPreMod + hVarMod, 40, 105);
   const aEffRating = clamp(effectiveRating(awayT.rating, aCoach?.rating) + aEdge + rookieVar(aCoach) + aPreMod + aVarMod, 40, 105);
   // Clear decision modifiers after use
@@ -2446,9 +2447,9 @@ function maybeShowPreGameModal(onConfirm, gameOverride) {
         {val:'normal',icon:'👊',label:'Normal Prep',desc:'Standard week'},
       ])}
       ${decRow('Player Health','health',[
-        {val:'push',icon:'💪',label:'Push Through',desc:'Full effort, +2 rating'},
-        {val:'normal',icon:'🏃',label:'Normal Load',desc:'Standard practice'},
-        {val:'rest',icon:'😴',label:'Rest Key Men',desc:'−2 rating, safer'},
+        {val:'push',icon:'💪',label:'Push Through',desc:'+3 rating, adds variance'},
+        {val:'normal',icon:'🏃',label:'Normal Load',desc:'Baseline — no change'},
+        {val:'rest',icon:'😴',label:'Rest Key Men',desc:'−3 rating, protects health'},
       ])}
       ${(()=>{
         const inspireArr = SEASON.inspireUsed || [];
@@ -2476,7 +2477,7 @@ function maybeShowPreGameModal(onConfirm, gameOverride) {
                 <span style="font-family:'Oswald',sans-serif;font-size:.82rem;font-weight:700;color:${isSelected?'#f59e0b':'var(--ink)'};">INSPIRE THE TEAM</span>
                 <span style="font-size:.55rem;background:${isSelected?'#f59e0b':'var(--muted)'};color:#fff;padding:1px 5px;border-radius:4px;font-weight:700;letter-spacing:1px;">${usesLeft} USE${usesLeft!==1?'S':''} LEFT</span>
               </div>
-              <div style="font-size:.63rem;color:var(--muted);">+20 rating boost · Electric atmosphere · ${isSelected?'<span style="color:#f59e0b;font-weight:700;">ACTIVATED</span>':'Tap to activate'}</div>
+              <div style="font-size:.63rem;color:var(--muted);">+8 rating boost · Electric atmosphere · ${isSelected?'<span style="color:#f59e0b;font-weight:700;">ACTIVATED</span>':'Tap to activate'}</div>
               ${inspireArr.length?`<div style="font-size:.6rem;color:var(--muted2);margin-top:2px;">Used: ${inspireArr.map(u=>'Wk '+u.week+' vs '+u.oppName).join(' · ')}</div>`:''}
             </div>
             ${isSelected?'<span style="font-size:1.2rem;">✓</span>':''}
@@ -2531,7 +2532,7 @@ function toggleInspire() {
           <span style="font-family:'Oswald',sans-serif;font-size:.82rem;font-weight:700;color:${isSelected?'#f59e0b':'var(--ink)'};">INSPIRE THE TEAM</span>
           <span style="font-size:.55rem;background:${isSelected?'#f59e0b':'var(--muted)'};color:#fff;padding:1px 5px;border-radius:4px;font-weight:700;letter-spacing:1px;">${usesLeft2} USE${usesLeft2!==1?'S':''} LEFT</span>
         </div>
-        <div style="font-size:.63rem;color:var(--muted);">+20 rating boost · Electric atmosphere · ${isSelected?'<span style="color:#f59e0b;font-weight:700;">ACTIVATED</span>':'Tap to activate'}</div>
+        <div style="font-size:.63rem;color:var(--muted);">+8 rating boost · Electric atmosphere · ${isSelected?'<span style="color:#f59e0b;font-weight:700;">ACTIVATED</span>':'Tap to activate'}</div>
         ${inspireArr2.length?`<div style="font-size:.6rem;color:var(--muted2);margin-top:2px;">Used: ${inspireArr2.map(u=>'Wk '+u.week+' vs '+u.oppName).join(' · ')}</div>`:''}
       </div>
       ${isSelected?'<span style="font-size:1.2rem;">✓</span>':''}
@@ -2545,16 +2546,16 @@ function applyPreGameDecision() {
   const myC=SEASON.coaches?.[SEASON.myTeamIdx];
   if(!myT) return;
   let ratingMod=0;
-  // Game plan — synergy with coach style gives extra boost
+  // Game plan — synergy gives a small extra edge; balanced is safe but limited
   if(d.gamePlan==='aggressive') {
-    ratingMod += myC?.style==='air-raid' ? 10 : 7;
-    myT._decisionVariance = 14;
+    ratingMod += myC?.style==='air-raid' ? 4 : 2;
+    myT._decisionVariance = 14;   // bidirectional: can swing hard either way
   } else if(d.gamePlan==='conservative') {
-    ratingMod += (myC?.style==='run-first'||myC?.style==='defensive') ? 10 : 7;
-    myT._decisionVariance = 5;
+    ratingMod += (myC?.style==='run-first'||myC?.style==='defensive') ? 4 : 2;
+    myT._decisionVariance = 3;    // very low swing, safe floor
   } else {
-    ratingMod += 6;
-    myT._decisionVariance = 8;
+    ratingMod += 2;
+    myT._decisionVariance = 6;
   }
   // Target — bonus scales with opponent's actual profile
   const w=SEASON.week; const games=SEASON.schedule[w-1]||[];
@@ -2564,23 +2565,23 @@ function applyPreGameDecision() {
     const oppT2=SEASON.teams[oppIdx]; const oppC2=SEASON.coaches?.[oppIdx];
     const oppProf2=getTeamProfile(oppT2,oppC2);
     // Attack their offense: higher reward vs a strong offense (more dangerous threat to neutralize)
-    if(d.target==='their-offense') ratingMod += oppProf2.off>=85?9:oppProf2.off>=70?7:5;
-    if(d.target==='neutral')       ratingMod += 5;
+    if(d.target==='their-offense') ratingMod += oppProf2.off>=85?3:oppProf2.off>=70?2:1;
+    if(d.target==='neutral')       ratingMod += 2;
     // Exploit their defense: higher reward vs a weak defense (more opportunity)
-    if(d.target==='their-defense') ratingMod += oppProf2.def<=50?9:oppProf2.def<=65?7:5;
+    if(d.target==='their-defense') ratingMod += oppProf2.def<=50?3:oppProf2.def<=65?2:1;
   }
-  // Motivation
-  if(d.motivation==='fired-up') { myT._decisionVariance=(myT._decisionVariance||0)+10; ratingMod+=4; }
-  if(d.motivation==='steady')   ratingMod+=7;
-  if(d.motivation==='normal')   ratingMod+=4;
-  // Health
-  if(d.health==='push')   ratingMod+=7;
-  if(d.health==='normal') ratingMod+=4;
-  if(d.health==='rest')   ratingMod+=1;
-  // Inspire: +20 flat boost, record use (max 2 per season)
+  // Motivation — fired-up is a gamble (high variance, modest expected boost)
+  if(d.motivation==='fired-up') { myT._decisionVariance=(myT._decisionVariance||0)+10; ratingMod+=1; }
+  if(d.motivation==='steady')   ratingMod+=3;
+  if(d.motivation==='normal')   ratingMod+=1;
+  // Health — rest costs you rating points; push adds a little with some variance
+  if(d.health==='push')   { ratingMod+=3; myT._decisionVariance=(myT._decisionVariance||0)+4; }
+  if(d.health==='normal') ratingMod+=0;
+  if(d.health==='rest')   ratingMod-=3;
+  // Inspire: +8 boost, record use (max 2 per season)
   if(d.inspire && (SEASON.inspireUsed||[]).length < 2) {
     if(!SEASON.inspireUsed) SEASON.inspireUsed = [];
-    ratingMod += 20;
+    ratingMod += 8;
     myT._decisionVariance = (myT._decisionVariance||0) + 5;
     const w=SEASON.week;
     const games2=SEASON.schedule[w-1]||[];
@@ -2596,20 +2597,20 @@ function calcPreGameRatingMod(d) {
   if(!d||!window._pgData) return 0;
   const {myC,oppC} = window._pgData;
   let mod=0;
-  if(d.gamePlan==='aggressive')    mod += myC?.style==='air-raid' ? 10 : 7;
-  else if(d.gamePlan==='conservative') mod += (myC?.style==='run-first'||myC?.style==='defensive') ? 10 : 7;
-  else if(d.gamePlan)              mod += 6;
+  if(d.gamePlan==='aggressive')        mod += myC?.style==='air-raid' ? 4 : 2;
+  else if(d.gamePlan==='conservative') mod += (myC?.style==='run-first'||myC?.style==='defensive') ? 4 : 2;
+  else if(d.gamePlan)                  mod += 2;
   const oppProf3 = window._pgData?.oppT ? getTeamProfile(window._pgData.oppT, oppC) : null;
-  if(d.target==='their-offense')      mod += oppProf3 ? (oppProf3.off>=85?9:oppProf3.off>=70?7:5) : 5;
-  else if(d.target==='neutral')       mod += 5;
-  else if(d.target==='their-defense') mod += oppProf3 ? (oppProf3.def<=50?9:oppProf3.def<=65?7:5) : 5;
-  if(d.motivation==='fired-up')    mod += 4;
-  else if(d.motivation==='steady') mod += 7;
-  else if(d.motivation==='normal') mod += 4;
-  if(d.health==='push')   mod += 7;
-  else if(d.health==='normal') mod += 4;
-  else if(d.health==='rest')   mod += 1;
-  if(d.inspire && (SEASON.inspireUsed||[]).length < 2) mod += 20;
+  if(d.target==='their-offense')      mod += oppProf3 ? (oppProf3.off>=85?3:oppProf3.off>=70?2:1) : 2;
+  else if(d.target==='neutral')       mod += 2;
+  else if(d.target==='their-defense') mod += oppProf3 ? (oppProf3.def<=50?3:oppProf3.def<=65?2:1) : 2;
+  if(d.motivation==='fired-up')    mod += 1;
+  else if(d.motivation==='steady') mod += 3;
+  else if(d.motivation==='normal') mod += 1;
+  if(d.health==='push')   mod += 3;
+  else if(d.health==='normal') mod += 0;
+  else if(d.health==='rest')   mod -= 3;
+  if(d.inspire && (SEASON.inspireUsed||[]).length < 2) mod += 8;
   return mod;
 }
 
@@ -2623,7 +2624,7 @@ function updatePreGameWinProb() {
     isHome?myAdj:oppT.rating, isHome?oppT.rating:myAdj,
     true, isHome?myC:oppC, isHome?oppC:myC,
     game.weather||'clear', !!game.rivalryName, false);
-  const pct = Math.round((isHome?rawWP:1-rawWP)*100);
+  const pct = Math.min(95, Math.round((isHome?rawWP:1-rawWP)*100));
   el.textContent = pct+'%';
   el.style.color = pct>=65?'#16a34a':pct>=45?'#d97706':'#dc2626';
 }
