@@ -2264,6 +2264,48 @@ function maybeShowPreGameModal(onConfirm, gameOverride) {
     'run-first':'Conservative suits your Run-First system (+3 boost).',
     defensive:'Conservative suits your Defensive system (+3 boost).'}[myC?.style||'balanced'];
 
+  // Opponent profile for display and smarter decision hints
+  const oppProf = getTeamProfile(oppT, oppC);
+  const myProf  = getTeamProfile(myT,  myC);
+  const oppOL   = profileLabel(oppProf.off);
+  const oppDL   = profileLabel(oppProf.def);
+  const oppRL   = profileLabel(oppProf.run);
+  const oppPL   = profileLabel(oppProf.pass);
+
+  // Opponent profile bar HTML
+  function miniBar(label, val, barColor) {
+    const lbl = profileLabel(val);
+    return `<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;">
+      <span style="font-size:.58rem;font-weight:700;letter-spacing:1px;color:var(--muted);width:30px;">${label}</span>
+      <div style="flex:1;height:5px;border-radius:3px;background:var(--border);overflow:hidden;">
+        <div style="width:${val}%;height:100%;background:${barColor};border-radius:3px;"></div>
+      </div>
+      <span style="font-size:.6rem;font-weight:700;color:${lbl.color};width:42px;">${val} ${lbl.label}</span>
+    </div>`;
+  }
+  const oppProfileHtml = `
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:8px 10px;margin-bottom:10px;">
+      <div style="font-size:.58rem;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:6px;">
+        ${oppT.name} Profile
+        ${oppC ? `<span style="font-weight:400;letter-spacing:0;text-transform:none;">· ${COACH_STYLE_EMOJI[oppC.style]} ${COACH_STYLE_LABELS[oppC.style]}</span>` : ''}
+      </div>
+      ${miniBar('OFF',  oppProf.off,  oppT.color)}
+      ${miniBar('DEF',  oppProf.def,  oppT.color)}
+      ${miniBar('RUN',  oppProf.run,  oppT.color)}
+      ${miniBar('PASS', oppProf.pass, oppT.color)}
+    </div>`;
+
+  // Context-aware hints for each target option
+  const attackOHint = oppProf.off >= 70
+    ? `Their offense is <strong style="color:${oppOL.color};">${oppOL.label.toLowerCase()}</strong> — shutting it down pays big`
+    : `Their offense is <strong style="color:${oppOL.color};">${oppOL.label.toLowerCase()}</strong> — lower payoff here`;
+  const exploitDHint = oppProf.def <= 60
+    ? `Their defense is <strong style="color:${oppDL.color};">${oppDL.label.toLowerCase()}</strong> — prime time to attack`
+    : `Their defense is <strong style="color:${oppDL.color};">${oppDL.label.toLowerCase()}</strong> — hard to exploit`;
+  // Game plan hints tied to opp defense
+  const aggrHint = oppProf.def <= 60 ? '🎯 Their D is vulnerable' : oppProf.def >= 80 ? '⚠️ Their D is strong' : 'High upside, high risk';
+  const consHint = oppProf.off >= 75 ? '🛡️ Protect vs their strong O' : 'Minimize mistakes';
+
   function decRow(title, field, opts) {
     return `<div style="margin-bottom:12px;">
       <div style="font-size:.63rem;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:6px;">${title}</div>
@@ -2307,16 +2349,17 @@ function maybeShowPreGameModal(onConfirm, gameOverride) {
       </div>
       ${myC?`<div style="font-size:.67rem;color:var(--muted);margin-bottom:8px;">${styleEmoji} Coach ${myC.name} · ${styleLabel}${myC.hotSeat?' 🔥':''}</div>`:''}
       ${ceHtml}
+      ${oppProfileHtml}
       <div style="font-size:.63rem;color:var(--muted2);background:var(--surface2);border-radius:6px;padding:6px 10px;margin-bottom:14px;border:1px solid var(--border);">💡 ${planHint}</div>
       ${decRow('Game Plan','gamePlan',[
-        {val:'aggressive',icon:'⚔️',label:'Aggressive',desc:'High upside, high risk'},
+        {val:'aggressive',icon:'⚔️',label:'Aggressive',desc:aggrHint},
         {val:'balanced',icon:'⚖️',label:'Balanced',desc:'Standard approach'},
-        {val:'conservative',icon:'🛡️',label:'Conservative',desc:'Minimize mistakes'},
+        {val:'conservative',icon:'🛡️',label:'Conservative',desc:consHint},
       ])}
       ${decRow('Opponent Target','target',[
-        {val:'their-offense',icon:'🎯',label:'Attack Their O',desc:'Blitz & pressure'},
+        {val:'their-offense',icon:'🎯',label:'Attack Their O',desc:attackOHint},
         {val:'neutral',icon:'➡️',label:'Execute Our Game',desc:'Our system first'},
-        {val:'their-defense',icon:'💥',label:'Exploit Their D',desc:'Spread & isolate'},
+        {val:'their-defense',icon:'💥',label:'Exploit Their D',desc:exploitDHint},
       ])}
       ${decRow('Motivation','motivation',[
         {val:'fired-up',icon:'🔥',label:'Fire Them Up',desc:'+variance, peak or bust'},
@@ -2434,15 +2477,18 @@ function applyPreGameDecision() {
     ratingMod += 6;
     myT._decisionVariance = 8;
   }
-  // Target — good matchup awareness gives extra boost
+  // Target — bonus scales with opponent's actual profile
   const w=SEASON.week; const games=SEASON.schedule[w-1]||[];
   const gi=games.findIndex(g=>(g.homeIdx===SEASON.myTeamIdx||g.awayIdx===SEASON.myTeamIdx)&&!g.played&&g.homeIdx>=0);
   if(gi>=0) {
     const game=games[gi]; const oppIdx=game.homeIdx===SEASON.myTeamIdx?game.awayIdx:game.homeIdx;
-    const oppC=SEASON.coaches?.[oppIdx];
-    if(d.target==='their-offense') ratingMod += oppC?.style==='air-raid' ? 8 : 5;
+    const oppT2=SEASON.teams[oppIdx]; const oppC2=SEASON.coaches?.[oppIdx];
+    const oppProf2=getTeamProfile(oppT2,oppC2);
+    // Attack their offense: higher reward vs a strong offense (more dangerous threat to neutralize)
+    if(d.target==='their-offense') ratingMod += oppProf2.off>=85?9:oppProf2.off>=70?7:5;
     if(d.target==='neutral')       ratingMod += 5;
-    if(d.target==='their-defense') ratingMod += myC?.style==='air-raid'||myC?.style==='run-first' ? 8 : 5;
+    // Exploit their defense: higher reward vs a weak defense (more opportunity)
+    if(d.target==='their-defense') ratingMod += oppProf2.def<=50?9:oppProf2.def<=65?7:5;
   }
   // Motivation
   if(d.motivation==='fired-up') { myT._decisionVariance=(myT._decisionVariance||0)+10; ratingMod+=4; }
@@ -2474,9 +2520,10 @@ function calcPreGameRatingMod(d) {
   if(d.gamePlan==='aggressive')    mod += myC?.style==='air-raid' ? 10 : 7;
   else if(d.gamePlan==='conservative') mod += (myC?.style==='run-first'||myC?.style==='defensive') ? 10 : 7;
   else if(d.gamePlan)              mod += 6;
-  if(d.target==='their-offense')   mod += oppC?.style==='air-raid' ? 8 : 5;
-  else if(d.target==='neutral')    mod += 5;
-  else if(d.target==='their-defense') mod += myC?.style==='air-raid'||myC?.style==='run-first' ? 8 : 5;
+  const oppProf3 = window._pgData?.oppT ? getTeamProfile(window._pgData.oppT, oppC) : null;
+  if(d.target==='their-offense')      mod += oppProf3 ? (oppProf3.off>=85?9:oppProf3.off>=70?7:5) : 5;
+  else if(d.target==='neutral')       mod += 5;
+  else if(d.target==='their-defense') mod += oppProf3 ? (oppProf3.def<=50?9:oppProf3.def<=65?7:5) : 5;
   if(d.motivation==='fired-up')    mod += 4;
   else if(d.motivation==='steady') mod += 7;
   else if(d.motivation==='normal') mod += 4;
@@ -6968,6 +7015,39 @@ function getCoach(tIdx) {
 }
 
 // Coaching edge label for UI
+// Derive off/def/run/pass sub-ratings from overall rating + coach style
+function getTeamProfile(t, c) {
+  const r = t.rating;
+  const style = c?.style || 'balanced';
+  let off, def, run, pass;
+  if (style === 'air-raid') {
+    off  = Math.min(99, Math.round(r + 8));
+    def  = Math.max(20, Math.round(r - 10));
+    run  = Math.max(20, Math.round(r - 12));
+    pass = Math.min(99, Math.round(r + 12));
+  } else if (style === 'run-first') {
+    off  = Math.min(99, Math.round(r + 5));
+    def  = Math.max(20, Math.round(r - 5));
+    run  = Math.min(99, Math.round(r + 12));
+    pass = Math.max(20, Math.round(r - 8));
+  } else if (style === 'defensive') {
+    off  = Math.max(20, Math.round(r - 8));
+    def  = Math.min(99, Math.round(r + 10));
+    run  = Math.round(r);
+    pass = Math.max(20, Math.round(r - 5));
+  } else {
+    off = def = run = pass = Math.round(r);
+  }
+  return { off, def, run, pass };
+}
+
+function profileLabel(v) {
+  if (v >= 85) return { label: 'Elite',    color: '#16a34a' };
+  if (v >= 70) return { label: 'Strong',   color: '#2563eb' };
+  if (v >= 55) return { label: 'Average',  color: '#d97706' };
+  return           { label: 'Weak',     color: '#dc2626' };
+}
+
 function coachEdgeLabel(hT, aT, weather, isRivalry, isPostseason) {
   const hC = getCoach(hT.idx), aC = getCoach(aT.idx);
   if(!hC || !aC) return null;
