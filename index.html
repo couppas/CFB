@@ -74,7 +74,12 @@
 [data-theme="dark"] .conf-group-hdr{background:#1e2330;color:#c0ccdd;}
 [data-theme="dark"] .play-log{background:#1e2330;}
 *{box-sizing:border-box;margin:0;padding:0;}
-body{background:var(--bg);color:var(--ink);font-family:'Inter',sans-serif;min-height:100vh;font-size:14px;}
+body{background:var(--bg);color:var(--ink);font-family:'Inter',sans-serif;min-height:100vh;font-size:14px;
+  background-image:repeating-linear-gradient(to bottom,transparent 0px,transparent 79px,rgba(0,0,0,.035) 79px,rgba(0,0,0,.035) 80px);
+}
+[data-theme="dark"] body{
+  background-image:repeating-linear-gradient(to bottom,transparent 0px,transparent 79px,rgba(255,255,255,.03) 79px,rgba(255,255,255,.03) 80px);
+}
 #app{max-width:1080px;margin:0 auto;padding:16px 20px;}
 .header{padding:16px 0 12px;border-bottom:2px solid var(--border);margin-bottom:20px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;}
 .header-logo{width:34px;height:34px;background:var(--navy);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:1rem;flex-shrink:0;}
@@ -1302,13 +1307,46 @@ function renderFranchiseHistory(tIdx) {
   const body = $('team-franchise-body');
   if(!card || !body) return;
 
-  if(!FRANCHISE || !FRANCHISE.seasonHistory || !FRANCHISE.seasonHistory.length) {
-    card.style.display = 'none';
-    return;
+  const myTeamName = SEASON.teams[tIdx]?.name;
+  const savedHistory = (FRANCHISE?.seasonHistory || []).filter(e => e.teamName === myTeamName);
+
+  // Build a live "current season" entry if this season hasn't been recorded yet
+  let history = savedHistory;
+  const currentSeasonNum = FRANCHISE?.seasonNumber || 1;
+  const alreadyRecorded = savedHistory.some(e => e.season === currentSeasonNum);
+  if(!alreadyRecorded && SEASON && SEASON.myTeamIdx !== null && SEASON.myTeamIdx !== undefined) {
+    const liveT = SEASON.teams[SEASON.myTeamIdx];
+    const liveC = SEASON.coaches?.[SEASON.myTeamIdx];
+    if(liveT && liveT.name === myTeamName) {
+      const liveRivalryWins = [];
+      if(SEASON.schedule) {
+        for(const wk of SEASON.schedule) {
+          for(const g of (wk||[])) {
+            if(!g.played || !g.rivalryName) continue;
+            const myWon = (g.homeIdx === SEASON.myTeamIdx && g.homeScore > g.awayScore) ||
+                          (g.awayIdx === SEASON.myTeamIdx && g.awayScore > g.homeScore);
+            if(myWon) liveRivalryWins.push(g.rivalryName);
+          }
+        }
+      }
+      const liveEntry = {
+        season: currentSeasonNum,
+        teamName: myTeamName,
+        wins: liveT.wins,
+        losses: liveT.losses,
+        finalRank: null,
+        cfpResult: null,
+        coachName: liveC ? liveC.name : '—',
+        prestigeEnd: FRANCHISE?.prestige || 0,
+        base: Math.round(FRANCHISE?.programBases?.[SEASON.myTeamIdx] ?? liveT.base),
+        confTitle: liveT.isConfChamp || false,
+        rivalryWins: liveRivalryWins,
+        inProgress: true,
+      };
+      history = [...savedHistory, liveEntry];
+    }
   }
 
-  const myTeamName = SEASON.teams[tIdx]?.name;
-  const history = FRANCHISE.seasonHistory.filter(e => e.teamName === myTeamName);
   if(!history.length) { card.style.display = 'none'; return; }
 
   // Cumulative stats
@@ -1361,20 +1399,60 @@ function renderFranchiseHistory(tIdx) {
     const resultBg = e.cfpResult === '🏆 National Champion' ? '#fef9c3' :
       e.cfpResult?.startsWith('CFP') ? '#eff6ff' : 'transparent';
     const pLabel = getPrestigeLabel(e.prestigeEnd);
-    return `<tr>
-      <td style="padding:7px 8px;border-bottom:1px solid var(--border);font-family:'Oswald',sans-serif;font-size:.75rem;font-weight:700;color:var(--navy);">S${e.season}</td>
+    const rowBg = e.inProgress ? 'background:rgba(245,158,11,.06);' : '';
+    const resultCell = e.inProgress
+      ? `<span style="font-size:.6rem;color:#d97706;font-style:italic;">In progress…</span>`
+      : `<span style="font-size:.65rem;font-weight:600;color:${resultColor};background:${resultBg};padding:1px 5px;border-radius:4px;">${e.cfpResult||'—'}</span>`;
+    return `<tr style="${rowBg}">
+      <td style="padding:7px 8px;border-bottom:1px solid var(--border);font-family:'Oswald',sans-serif;font-size:.75rem;font-weight:700;color:var(--navy);">S${e.season}${e.inProgress?' <span style="font-size:.5rem;color:#d97706;">●</span>':''}</td>
       <td style="padding:7px 8px;border-bottom:1px solid var(--border);font-family:'Source Code Pro',monospace;font-size:.75rem;font-weight:700;color:var(--ink);">${e.wins}–${e.losses}</td>
       <td style="padding:7px 8px;border-bottom:1px solid var(--border);font-family:'Source Code Pro',monospace;font-size:.7rem;color:var(--muted);">${rankStr}</td>
-      <td style="padding:7px 6px;border-bottom:1px solid var(--border);">
-        <span style="font-size:.65rem;font-weight:600;color:${resultColor};background:${resultBg};padding:1px 5px;border-radius:4px;">${e.cfpResult||'—'}</span>
-      </td>
+      <td style="padding:7px 6px;border-bottom:1px solid var(--border);">${resultCell}</td>
       <td style="padding:7px 8px;border-bottom:1px solid var(--border);font-size:.65rem;color:var(--muted);white-space:nowrap;">${e.coachName}</td>
       <td style="padding:7px 8px;border-bottom:1px solid var(--border);font-size:.65rem;font-weight:700;color:${pLabel.color};">${e.prestigeEnd}</td>
     </tr>`;
   }).join('');
 
+  // Trophy case — aggregate trophies across all seasons
+  const natties = history.filter(e => e.cfpResult === '🏆 National Champion').length;
+  const confTitles = history.filter(e => e.confTitle).length;
+  const bowlWins = history.filter(e => e.cfpResult?.startsWith('W ')).length;
+  // Count each rivalry trophy by name
+  const trophyCounts = {};
+  history.forEach(e => (e.rivalryWins||[]).forEach(t => { trophyCounts[t] = (trophyCounts[t]||0) + 1; }));
+  const trophyEntries = Object.entries(trophyCounts).sort((a,b) => b[1]-a[1]);
+
+  const hasTrophies = natties || confTitles || bowlWins || trophyEntries.length;
+  const trophyCaseHtml = hasTrophies ? `
+    <div style="margin-bottom:14px;">
+      <div style="font-family:'Oswald',sans-serif;font-size:.6rem;letter-spacing:3px;text-transform:uppercase;color:var(--muted);margin-bottom:8px;">Trophy Case</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        ${natties ? `<div style="background:#fef9c3;border:1px solid #fcd34d;border-radius:8px;padding:6px 10px;text-align:center;">
+          <div style="font-size:1.1rem;">🏆</div>
+          <div style="font-family:'Oswald',sans-serif;font-size:.9rem;font-weight:700;color:#92400e;">${natties}</div>
+          <div style="font-size:.56rem;color:#a16207;">Natl. Title${natties>1?'s':''}</div>
+        </div>` : ''}
+        ${confTitles ? `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:6px 10px;text-align:center;">
+          <div style="font-size:1.1rem;">🎖️</div>
+          <div style="font-family:'Oswald',sans-serif;font-size:.9rem;font-weight:700;color:var(--ink);">${confTitles}</div>
+          <div style="font-size:.56rem;color:var(--muted);">Conf. Title${confTitles>1?'s':''}</div>
+        </div>` : ''}
+        ${bowlWins ? `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:6px 10px;text-align:center;">
+          <div style="font-size:1.1rem;">🏈</div>
+          <div style="font-family:'Oswald',sans-serif;font-size:.9rem;font-weight:700;color:var(--ink);">${bowlWins}</div>
+          <div style="font-size:.56rem;color:var(--muted);">Bowl Win${bowlWins>1?'s':''}</div>
+        </div>` : ''}
+        ${trophyEntries.map(([name, cnt]) => `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:6px 10px;text-align:center;">
+          <div style="font-size:1rem;">🏆</div>
+          <div style="font-family:'Oswald',sans-serif;font-size:.82rem;font-weight:700;color:var(--ink);">${cnt}×</div>
+          <div style="font-size:.55rem;color:var(--muted);max-width:64px;line-height:1.2;">${name}</div>
+        </div>`).join('')}
+      </div>
+    </div>` : '';
+
   body.innerHTML = `
     ${summaryHtml}
+    ${trophyCaseHtml}
     <div style="overflow-x:auto;">
       <table style="width:100%;border-collapse:collapse;font-size:.8rem;">
         <thead>
@@ -2656,6 +2734,19 @@ function recordSeasonHistory(prestigeEarned) {
   }
   if(!cfpResult && myT.wins < 6) cfpResult = 'No Bowl';
 
+  // Collect rivalry trophies won this season
+  const rivalryWins = [];
+  if(SEASON.schedule) {
+    for(const wk of SEASON.schedule) {
+      for(const g of (wk||[])) {
+        if(!g.played || !g.rivalryName) continue;
+        const myWon = (g.homeIdx === myIdx && g.homeScore > g.awayScore) ||
+                      (g.awayIdx === myIdx && g.awayScore > g.homeScore);
+        if(myWon) rivalryWins.push(g.rivalryName);
+      }
+    }
+  }
+
   const entry = {
     season: FRANCHISE.seasonNumber || 1,
     teamName: myT.name,
@@ -2666,6 +2757,8 @@ function recordSeasonHistory(prestigeEarned) {
     coachName: myC ? myC.name : '—',
     prestigeEnd: FRANCHISE.prestige || 0,
     base: Math.round(FRANCHISE.programBases?.[myIdx] ?? myT.base),
+    confTitle: myT.isConfChamp || false,
+    rivalryWins,
   };
 
   if(!FRANCHISE.seasonHistory) FRANCHISE.seasonHistory = [];
@@ -6587,8 +6680,6 @@ function renderPostseasonTab() {
     const simBtn = !played && hT && aT ? '<div style="padding:7px 10px;border-top:1px solid var(--border);"><button class="btn btn-primary btn-sm" style="width:100%" onclick="event.stopPropagation();'+simCall+'renderSchedTab(false);">⚡ Simulate</button></div>' : '';
 
     const attStr = att && att.attendance ? `<span style="font-size:.6rem;color:var(--muted2);">🏟 ${att.attendance.toLocaleString()} (${fillStrPlain(att.fillPct)})</span>` : '';
-    const coachEdge = !played && hT && aT ? coachEdgeLabel(hT, aT, 'clear', false, true) : null;
-    const coachEdgeStr = coachEdge ? `<span style="font-size:.6rem;background:rgba(37,99,235,.12);color:#2563eb;border:1px solid rgba(37,99,235,.25);padding:1px 6px;border-radius:8px;font-weight:600;">${coachEdge.icon} Coaching Edge +${coachEdge.edge} ${coachEdge.team.name}</span>` : '';
     const wx = played && weather ? ({clear:'☀️',wind:'💨',rain:'🌧️',snow:'❄️'}[weather]||'') : '';
     const views = played && hT && aT ? calcViewership({played,tv,homeScore:hScore,awayScore:aScore,weather}, hT, aT) : null;
     const viewStr = views ? `<span style="font-size:.6rem;font-weight:600;color:var(--muted2);">${views.str}</span>` : '';
@@ -6610,7 +6701,7 @@ function renderPostseasonTab() {
         <span class="${played?(aw?'result-w':'result-l'):''}" style="font-size:.8rem;flex-shrink:0;">${played?aScore:'—'}</span>
       </div>
       <div class="result-item-footer" style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;">
-        ${wx?`<span style="font-size:.8rem;">${wx}</span>`:''}${coachEdgeStr}${attStr}${viewStr}
+        ${wx?`<span style="font-size:.8rem;">${wx}</span>`:''}${attStr}${viewStr}
         ${tv?`<span style="margin-left:auto;">${tvBadgeHTML(tv,played?null:kickoff)}</span>`:''}
         ${played?('<span style="font-size:.6rem;color:var(--muted2);"'+(tv?'':' style="margin-left:auto;"')+'>📊</span>'):''}
       </div>
@@ -8088,7 +8179,19 @@ function openBoxScore(homeTeam, awayTeam, homeScore, awayScore, boxScore, locati
     return tvHTML + attRow;
   }
 
+  // Trophy/rivalry banner for played rivalry games
+  const trophyBanner = game?.rivalryName ? (()=>{
+    const hw = homeScore > awayScore;
+    const winner = hw ? homeTeam : awayTeam;
+    const seasonLabel = FRANCHISE?.seasonNumber ? `Season ${FRANCHISE.seasonNumber}` : '';
+    return `<div style="text-align:center;padding:7px 14px;background:linear-gradient(90deg,#fef3c7,#fffbeb,#fef3c7);border-bottom:1px solid #fcd34d;">
+      <div style="font-size:.65rem;font-weight:700;color:#92400e;letter-spacing:1px;">🏆 ${game.rivalryName}</div>
+      <div style="font-size:.6rem;color:#a16207;margin-top:2px;"><strong>${winner.name}</strong> hold the trophy${seasonLabel ? ` · ${seasonLabel}` : ''}</div>
+    </div>`;
+  })() : '';
+
   $('modal-body').innerHTML=`
+  ${trophyBanner}
   <div class="bs-score-banner">
     <div class="bs-team">${teamIdentity(homeTeam, homeScore, true)}</div>
     <div class="bs-score-mid"><div class="bs-final-score">${homeScore} – ${awayScore}</div><div class="bs-ot">${bs.home?.ot?'OVERTIME':'FINAL'}</div></div>
