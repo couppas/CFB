@@ -947,39 +947,101 @@ const CONF_INFO = {
 
 // Fixed rivalries (always play each other in conf schedule)
 const RIVALRIES = [
+  // SEC
   ['Alabama','Auburn'],
   ['Alabama','Tennessee'],
-  ['Ohio State','Michigan'],
-  ['Oregon','Washington'],
-  ['USC','UCLA'],
   ['Georgia','Florida'],
   ['Texas','Texas A&M'],
-  ['Kansas','Kansas State'],
-  ['Iowa','Iowa State'],
-  ['Army','Navy'],
-  ['Clemson','Florida State'],
-  ['Clemson','South Carolina'],
+  ['Ole Miss','Mississippi State'],
+  ['Arkansas','LSU'],
+  ['Arkansas','Missouri'],
+  // Big Ten
+  ['Ohio State','Michigan'],
+  ['Oregon','Washington'],
   ['Michigan','Michigan State'],
+  ['Penn State','Michigan State'],
+  ['Indiana','Purdue'],
+  ['Michigan','Minnesota'],
+  ['Iowa','Minnesota'],
+  ['Iowa','Wisconsin'],
+  ['Ohio State','Illinois'],
+  ['Indiana','Michigan State'],
+  ['Iowa','Nebraska'],
+  ['Illinois','Purdue'],
+  ['Illinois','Northwestern'],
+  ['Minnesota','Wisconsin'],
+  // Big 12
+  ['Kansas','Kansas State'],
+  ['Iowa State','Kansas State'],
   ['Oklahoma','Oklahoma State'],
   ['Texas','Oklahoma'],
+  ['Arizona','Arizona State'],
+  // ACC
+  ['Clemson','Florida State'],
+  ['Clemson','South Carolina'],
+  ['Virginia','Virginia Tech'],
+  ['Duke','North Carolina'],
+  ['Miami','Florida State'],
+  // AAC
+  ['Army','Navy'],
+  // Mountain West
+  ['Nevada','UNLV'],
+  ['Air Force','Colorado State'],
+  ['Colorado State','Wyoming'],
 ];
 
 const RIVALRY_NAMES = {
+  // SEC
   'Alabama_Auburn': 'Iron Bowl',
   'Alabama_Tennessee': 'Third Saturday in October',
-  'Michigan_Ohio State': 'The Game',
-  'Oregon_Washington': 'Apple Cup',
-  'UCLA_USC': 'LA Rivalry',
   'Florida_Georgia': "World's Largest Outdoor Cocktail Party",
   'Texas_Texas A&M': 'Lone Star Showdown',
-  'Kansas_Kansas State': 'Sunflower Showdown',
-  'Iowa_Iowa State': 'Cy-Hawk Trophy',
-  'Army_Navy': 'Army–Navy Game',
-  'Clemson_Florida State': 'Bowden Bowl',
-  'Clemson_South Carolina': 'Palmetto Bowl',
+  'Mississippi State_Ole Miss': 'Egg Bowl',
+  'Arkansas_LSU': 'Battle for the Boot',
+  'Arkansas_Missouri': 'Battle Line Trophy',
+  // Big Ten
+  'Michigan_Ohio State': 'The Game',
+  'Oregon_Washington': 'Apple Cup',
   'Michigan_Michigan State': 'Paul Bunyan Trophy',
+  'Michigan State_Penn State': 'Land Grant Trophy',
+  'Indiana_Purdue': 'Old Oaken Bucket',
+  'Michigan_Minnesota': 'Little Brown Jug',
+  'Iowa_Minnesota': 'Floyd of Rosedale',
+  'Iowa_Wisconsin': 'Heartland Trophy',
+  'Illinois_Ohio State': 'Illibuck',
+  'Indiana_Michigan State': 'Old Brass Spittoon',
+  'Iowa_Nebraska': 'Heroes Trophy',
+  'Illinois_Purdue': 'Purdue Cannon',
+  'Illinois_Northwestern': 'Land of Lincoln Trophy',
+  'Minnesota_Wisconsin': "Paul Bunyan's Axe",
+  // Big 12
+  'Kansas_Kansas State': 'Sunflower Showdown',
+  'Iowa State_Kansas State': 'Farmageddon',
   'Oklahoma_Oklahoma State': 'Bedlam Series',
   'Oklahoma_Texas': 'Red River Rivalry',
+  'Arizona_Arizona State': 'Territorial Cup',
+  // ACC
+  'UCLA_USC': 'LA Rivalry',
+  'Clemson_Florida State': 'Bowden Bowl',
+  'Clemson_South Carolina': 'Palmetto Bowl',
+  'Virginia_Virginia Tech': 'Commonwealth Cup',
+  'Duke_North Carolina': 'Victory Bell',
+  'Florida State_Miami': 'Sunshine Showdown',
+  // AAC
+  'Army_Navy': 'Army–Navy Game',
+  // Mountain West
+  'Nevada_UNLV': 'Fremont Cannon',
+  'Air Force_Colorado State': 'Ram-Falcon Trophy',
+  'Colorado State_Wyoming': 'Bronze Boot',
+  // Cross-conference
+  'Iowa_Iowa State': 'Cy-Hawk Trophy',
+  'Georgia_Georgia Tech': 'Clean Old-Fashioned Hate',
+  'Kentucky_Louisville': "Governor's Cup",
+  'Pittsburgh_West Virginia': 'Backyard Brawl',
+  'SMU_TCU': 'Iron Skillet',
+  'Iowa State_Missouri': 'Telephone Trophy',
+  'Air Force_Army': "Commander-in-Chief's Trophy",
+  'Air Force_Navy': "Commander-in-Chief's Trophy",
 };
 
 // Traditional week (1-indexed) for select rivalries — most are final regular season week
@@ -996,6 +1058,13 @@ const RIVALRY_WEEKS = {
   'Texas_Texas A&M': 12,            // Lone Star Showdown — always Week 12
   'Oklahoma_Oklahoma State': 12,    // Bedlam — always Week 12
   'Oklahoma_Texas': 6,              // Red River Rivalry — Cotton Bowl, early October
+  'Indiana_Purdue': 12,             // Old Oaken Bucket — Thanksgiving week
+  'Minnesota_Wisconsin': 12,        // Paul Bunyan's Axe — final regular season week
+  'Mississippi State_Ole Miss': 12, // Egg Bowl — always final week
+  'Arkansas_LSU': 12,               // Battle for the Boot — late season
+  'Virginia_Virginia Tech': 12,     // Commonwealth Cup — final week
+  'Georgia_Georgia Tech': 12,       // Clean Old-Fashioned Hate — final week
+  'Pittsburgh_West Virginia': 12,   // Backyard Brawl — traditionally final week
 };
 
 // ═══════════════════════════════════════════════════════
@@ -1457,6 +1526,10 @@ function buildSchedule(teams) {
     ['Clemson','South Carolina'],['Iowa','Iowa State'],
     ['Oklahoma','Oklahoma State'],['Notre Dame','USC'],
     ['Notre Dame','Michigan'],['Army','Navy'],
+    // Trophy games across conference lines
+    ['Georgia','Georgia Tech'],['Kentucky','Louisville'],
+    ['Pittsburgh','West Virginia'],['SMU','TCU'],
+    ['Iowa State','Missouri'],['Army','Air Force'],['Navy','Air Force'],
   ];
   for(const [a, b] of crossRivals) {
     const tA = teams.find(t => t.name === a);
