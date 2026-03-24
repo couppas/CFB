@@ -518,6 +518,8 @@ select:focus{border-color:var(--navy);}
       <div class="week-pill" id="season-week-pill">Preseason</div>
       <div style="margin-left:auto;display:flex;gap:8px;">
         <button class="btn btn-ghost btn-sm" onclick="promptSaveSlot()">💾 Save</button>
+        <button class="btn btn-ghost btn-sm" onclick="inGameCloudPush()" title="Upload save to GitHub">☁️↑</button>
+        <button class="btn btn-ghost btn-sm" onclick="inGameCloudPull()" title="Download save from GitHub">☁️↓</button>
         <button class="btn btn-danger btn-sm" onclick="confirmReset()">↺ Reset</button>
       </div>
     </div>
@@ -4428,6 +4430,9 @@ async function cloudPullAll(){
     showToast(`✓ Synced ${count} slot${count!==1?'s':''} from cloud`);
   } catch(e){ showToast(`⚠ Sync failed: ${e.message}`); }
 }
+
+function inGameCloudPush(){ if(!gistToken()){showCloudModal();return;} cloudPush(activeSlot); }
+function inGameCloudPull(){ if(!gistToken()){showCloudModal();return;} cloudPull(activeSlot); }
 
 function showCloudModal(){
   const hasToken = !!gistToken();
@@ -8344,7 +8349,7 @@ function openTeamProfile(tIdx, returnScreen){
   const _cfpAvail=SEASON.cfpRankings&&SEASON.cfpRankings.length>=2;
   $('rank-chart-wrap').innerHTML=`<div class="rank-chart-title">Ranking History</div>`
     +makeRankRow('AP Poll',SEASON.apRankings,t.color,`cg_ap_${tIdx}`,'No data yet')
-    +makeRankRow('Coaches Poll',SEASON.coachesRankings,'#6b7280',`cg_c_${tIdx}`,'No data yet')
+    +makeRankRow('Coaches Poll',SEASON.coachesRankings,'#d97706',`cg_c_${tIdx}`,'No data yet')
     +makeRankRow('CFP Rankings',_cfpAvail?SEASON.cfpRankings:null,'#7c3aed',`cg_cfp_${tIdx}`,'Available from week 9');
 
   const ppg=(t.wins+t.losses)?((t.pointsFor/(t.wins+t.losses)).toFixed(1)):0;
