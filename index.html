@@ -960,6 +960,7 @@ const RIVALRIES = [
   ['Oregon','Washington'],
   ['Michigan','Michigan State'],
   ['Penn State','Michigan State'],
+  ['Minnesota','Penn State'],
   ['Indiana','Purdue'],
   ['Michigan','Minnesota'],
   ['Iowa','Minnesota'],
@@ -967,8 +968,10 @@ const RIVALRIES = [
   ['Ohio State','Illinois'],
   ['Indiana','Michigan State'],
   ['Iowa','Nebraska'],
+  ['Nebraska','Wisconsin'],
   ['Illinois','Purdue'],
   ['Illinois','Northwestern'],
+  ['Michigan','Northwestern'],
   ['Minnesota','Wisconsin'],
   // Big 12
   ['Kansas','Kansas State'],
@@ -976,9 +979,14 @@ const RIVALRIES = [
   ['Oklahoma','Oklahoma State'],
   ['Texas','Oklahoma'],
   ['Arizona','Arizona State'],
+  ['Baylor','TCU'],
+  ['TCU','Texas Tech'],
   // ACC
   ['Clemson','Florida State'],
   ['Clemson','South Carolina'],
+  ['Clemson','NC State'],
+  ['Boston College','Clemson'],
+  ['California','Stanford'],
   ['Virginia','Virginia Tech'],
   ['Duke','North Carolina'],
   ['Miami','Florida State'],
@@ -987,7 +995,13 @@ const RIVALRIES = [
   // Mountain West
   ['Nevada','UNLV'],
   ['Air Force','Colorado State'],
+  ['Air Force','Hawaii'],
+  ['Boise State','Fresno State'],
+  ['Fresno State','San Diego State'],
   ['Colorado State','Wyoming'],
+  // Sun Belt
+  ['South Alabama','Troy'],
+  ['Arkansas State','Louisiana'],
 ];
 
 const RIVALRY_NAMES = {
@@ -1004,6 +1018,7 @@ const RIVALRY_NAMES = {
   'Oregon_Washington': 'Apple Cup',
   'Michigan_Michigan State': 'Paul Bunyan Trophy',
   'Michigan State_Penn State': 'Land Grant Trophy',
+  'Minnesota_Penn State': "Governor's Victory Bell",
   'Indiana_Purdue': 'Old Oaken Bucket',
   'Michigan_Minnesota': 'Little Brown Jug',
   'Iowa_Minnesota': 'Floyd of Rosedale',
@@ -1011,8 +1026,10 @@ const RIVALRY_NAMES = {
   'Illinois_Ohio State': 'Illibuck',
   'Indiana_Michigan State': 'Old Brass Spittoon',
   'Iowa_Nebraska': 'Heroes Trophy',
+  'Nebraska_Wisconsin': 'Freedom Trophy',
   'Illinois_Purdue': 'Purdue Cannon',
   'Illinois_Northwestern': 'Land of Lincoln Trophy',
+  'Michigan_Northwestern': 'George Jewett Trophy',
   'Minnesota_Wisconsin': "Paul Bunyan's Axe",
   // Big 12
   'Kansas_Kansas State': 'Sunflower Showdown',
@@ -1020,10 +1037,15 @@ const RIVALRY_NAMES = {
   'Oklahoma_Oklahoma State': 'Bedlam Series',
   'Oklahoma_Texas': 'Red River Rivalry',
   'Arizona_Arizona State': 'Territorial Cup',
+  'Baylor_TCU': 'Bluebonnet Battle',
+  'TCU_Texas Tech': 'Saddle Trophy',
   // ACC
   'UCLA_USC': 'LA Rivalry',
   'Clemson_Florida State': 'Bowden Bowl',
   'Clemson_South Carolina': 'Palmetto Bowl',
+  'Clemson_NC State': 'Textile Bowl',
+  'Boston College_Clemson': "O'Rourke-McFadden Trophy",
+  'California_Stanford': 'Stanford Axe',
   'Virginia_Virginia Tech': 'Commonwealth Cup',
   'Duke_North Carolina': 'Victory Bell',
   'Florida State_Miami': 'Sunshine Showdown',
@@ -1032,7 +1054,13 @@ const RIVALRY_NAMES = {
   // Mountain West
   'Nevada_UNLV': 'Fremont Cannon',
   'Air Force_Colorado State': 'Ram-Falcon Trophy',
+  'Air Force_Hawaii': 'Kuter Trophy',
+  'Boise State_Fresno State': 'Milk Can',
+  'Fresno State_San Diego State': 'Oil Can Trophy',
   'Colorado State_Wyoming': 'Bronze Boot',
+  // Sun Belt
+  'South Alabama_Troy': 'Battle for the Belt',
+  'Arkansas State_Louisiana': 'Battle of the Boot',
   // Cross-conference
   'Iowa_Iowa State': 'Cy-Hawk Trophy',
   'Georgia_Georgia Tech': 'Clean Old-Fashioned Hate',
@@ -1042,6 +1070,16 @@ const RIVALRY_NAMES = {
   'Iowa State_Missouri': 'Telephone Trophy',
   'Air Force_Army': "Commander-in-Chief's Trophy",
   'Air Force_Navy': "Commander-in-Chief's Trophy",
+  'Michigan State_Notre Dame': 'Megaphone Trophy',
+  'Notre Dame_USC': 'Jeweled Shillelagh',
+  'Notre Dame_Purdue': 'Shillelagh Trophy',
+  'Boston College_Notre Dame': 'Frank Leahy Memorial Bowl',
+  'Notre Dame_Stanford': 'Legends Trophy',
+  'Navy_Notre Dame': 'Rip Miller Trophy',
+  'Virginia Tech_West Virginia': 'Black Diamond Trophy',
+  'Cincinnati_Louisville': 'Keg of Nails',
+  'Houston_Rice': 'Bayou Bucket',
+  'FAU_FIU': 'Shula Bowl',
 };
 
 // Traditional week (1-indexed) for select rivalries — most are final regular season week
@@ -1530,6 +1568,11 @@ function buildSchedule(teams) {
     ['Georgia','Georgia Tech'],['Kentucky','Louisville'],
     ['Pittsburgh','West Virginia'],['SMU','TCU'],
     ['Iowa State','Missouri'],['Army','Air Force'],['Navy','Air Force'],
+    ['Michigan State','Notre Dame'],['Notre Dame','Purdue'],
+    ['Boston College','Notre Dame'],['Notre Dame','Stanford'],
+    ['Navy','Notre Dame'],['Cincinnati','Louisville'],
+    ['Houston','Rice'],['Virginia Tech','West Virginia'],
+    ['FAU','FIU'],
   ];
   for(const [a, b] of crossRivals) {
     const tA = teams.find(t => t.name === a);
