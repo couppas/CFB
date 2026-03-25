@@ -2399,6 +2399,12 @@ function maybeShowPreGameModal(onConfirm, gameOverride) {
   // Game plan hints tied to opp defense
   const aggrHint = oppProf.def <= 60 ? '🎯 Their D is vulnerable' : oppProf.def >= 80 ? '⚠️ Their D is strong' : 'High upside, high risk';
   const consHint = oppProf.off >= 75 ? '🛡️ Protect vs their strong O' : 'Minimize mistakes';
+  // Tempo hints
+  const tempoFastHint = myC?.style==='air-raid' ? '✨ Your Air Raid thrives at pace' : oppProf.off>=75 ? 'Risky vs strong offenses' : 'More possessions, more upside';
+  const tempoSlowHint = (myC?.style==='run-first'||myC?.style==='defensive') ? '✨ Suits your ground-and-pound style' : oppProf.off>=75 ? 'Neutralizes their strong offense' : 'Limits variance, grinds clock';
+  // Red zone hints
+  const rzAggrHint = oppProf.def<=60 ? '🎯 Their D is weak — go get it' : oppProf.def>=80 ? '⚠️ High risk vs their strong D' : '4th-down aggression, high upside';
+  const rzConserveHint = oppProf.def>=75 ? '🛡️ Smart floor vs their strong D' : 'Safe points, caps ceiling';
 
   function decRow(title, field, opts) {
     return `<div style="margin-bottom:12px;">
@@ -2465,6 +2471,16 @@ function maybeShowPreGameModal(onConfirm, gameOverride) {
         {val:'normal',icon:'🏃',label:'Normal Load',desc:'Baseline — no change'},
         {val:'rest',icon:'😴',label:'Rest Key Men',desc:'−3 rating, protects health'},
       ])}
+      ${decRow('Tempo','tempo',[
+        {val:'fast',icon:'⚡',label:'Push the Pace',desc:tempoFastHint},
+        {val:'normal',icon:'🏈',label:'Normal Tempo',desc:'Standard pace'},
+        {val:'slow',icon:'🐢',label:'Grind It Out',desc:tempoSlowHint},
+      ])}
+      ${decRow('Red Zone','redZone',[
+        {val:'aggressive',icon:'🎲',label:'Go For It',desc:rzAggrHint},
+        {val:'standard',icon:'📋',label:'Standard',desc:'Balanced approach'},
+        {val:'conservative',icon:'🦶',label:'Kick the FG',desc:rzConserveHint},
+      ])}
       ${(()=>{
         const inspireArr = SEASON.inspireUsed || [];
         const usesLeft = 2 - inspireArr.length;
@@ -2509,12 +2525,17 @@ function maybeShowPreGameModal(onConfirm, gameOverride) {
 }
 
 function selectPreGameOpt(btn, field) {
+  if(!SEASON.preGameDecision) SEASON.preGameDecision={};
+  const alreadySelected = SEASON.preGameDecision[field] === btn.dataset.val;
   document.querySelectorAll(`.pregame-opt[data-field="${field}"]`).forEach(b=>{
     b.style.background='var(--surface2)'; b.style.borderColor='var(--border)'; b.style.color='var(--ink)';
   });
-  btn.style.background='var(--navy)'; btn.style.borderColor='var(--navy)'; btn.style.color='#fff';
-  if(!SEASON.preGameDecision) SEASON.preGameDecision={};
-  SEASON.preGameDecision[btn.dataset.field]=btn.dataset.val;
+  if(alreadySelected) {
+    delete SEASON.preGameDecision[field];
+  } else {
+    btn.style.background='var(--navy)'; btn.style.borderColor='var(--navy)'; btn.style.color='#fff';
+    SEASON.preGameDecision[field]=btn.dataset.val;
+  }
   updatePreGameWinProb();
 }
 
@@ -2567,10 +2588,10 @@ function applyPreGameDecision() {
   } else if(d.gamePlan==='conservative') {
     ratingMod += (myC?.style==='run-first'||myC?.style==='defensive') ? 4 : 2;
     myT._decisionVariance = 3;    // very low swing, safe floor
-  } else {
+  } else if(d.gamePlan==='balanced') {
     ratingMod += 2;
     myT._decisionVariance = 6;
-  }
+  } // undefined (deselected) → no bonus, no variance set
   // Target — bonus scales with opponent's actual profile
   const w=SEASON.week; const games=SEASON.schedule[w-1]||[];
   const gi=games.findIndex(g=>(g.homeIdx===SEASON.myTeamIdx||g.awayIdx===SEASON.myTeamIdx)&&!g.played&&g.homeIdx>=0);
@@ -2592,6 +2613,26 @@ function applyPreGameDecision() {
   if(d.health==='push')   { ratingMod+=3; myT._decisionVariance=(myT._decisionVariance||0)+4; }
   if(d.health==='normal') ratingMod+=0;
   if(d.health==='rest')   ratingMod-=3;
+  // Tempo — fast benefits air-raid, slow benefits run-first/defensive
+  if(d.tempo==='fast') {
+    ratingMod += myC?.style==='air-raid' ? 4 : 2;
+    myT._decisionVariance = (myT._decisionVariance||0) + 8;
+  } else if(d.tempo==='normal') {
+    ratingMod += 1;
+  } else if(d.tempo==='slow') {
+    ratingMod += (myC?.style==='run-first'||myC?.style==='defensive') ? 4 : 2;
+    myT._decisionVariance = Math.max(0, (myT._decisionVariance||0) - 4);
+  }
+  // Red zone — go for it adds variance; kick FG reduces it with a stable bonus
+  if(d.redZone==='aggressive') {
+    ratingMod += 2;
+    myT._decisionVariance = (myT._decisionVariance||0) + 8;
+  } else if(d.redZone==='standard') {
+    ratingMod += 1;
+  } else if(d.redZone==='conservative') {
+    ratingMod += 3;
+    myT._decisionVariance = Math.max(0, (myT._decisionVariance||0) - 5);
+  }
   // Inspire: +8 boost, record use (max 2 per season)
   if(d.inspire && (SEASON.inspireUsed||[]).length < 2) {
     if(!SEASON.inspireUsed) SEASON.inspireUsed = [];
@@ -2613,7 +2654,7 @@ function calcPreGameRatingMod(d) {
   let mod=0;
   if(d.gamePlan==='aggressive')        mod += myC?.style==='air-raid' ? 4 : 2;
   else if(d.gamePlan==='conservative') mod += (myC?.style==='run-first'||myC?.style==='defensive') ? 4 : 2;
-  else if(d.gamePlan)                  mod += 2;
+  else if(d.gamePlan==='balanced')     mod += 2;
   const oppProf3 = window._pgData?.oppT ? getTeamProfile(window._pgData.oppT, oppC) : null;
   if(d.target==='their-offense')      mod += oppProf3 ? (oppProf3.off>=85?3:oppProf3.off>=70?2:1) : 2;
   else if(d.target==='neutral')       mod += 2;
@@ -2624,6 +2665,12 @@ function calcPreGameRatingMod(d) {
   if(d.health==='push')   mod += 3;
   else if(d.health==='normal') mod += 0;
   else if(d.health==='rest')   mod -= 3;
+  if(d.tempo==='fast')        mod += myC?.style==='air-raid' ? 4 : 2;
+  else if(d.tempo==='normal') mod += 1;
+  else if(d.tempo==='slow')   mod += (myC?.style==='run-first'||myC?.style==='defensive') ? 4 : 2;
+  if(d.redZone==='aggressive')    mod += 2;
+  else if(d.redZone==='standard') mod += 1;
+  else if(d.redZone==='conservative') mod += 3;
   if(d.inspire && (SEASON.inspireUsed||[]).length < 2) mod += 8;
   return mod;
 }
