@@ -2509,12 +2509,17 @@ function maybeShowPreGameModal(onConfirm, gameOverride) {
 }
 
 function selectPreGameOpt(btn, field) {
+  if(!SEASON.preGameDecision) SEASON.preGameDecision={};
+  const alreadySelected = SEASON.preGameDecision[field] === btn.dataset.val;
   document.querySelectorAll(`.pregame-opt[data-field="${field}"]`).forEach(b=>{
     b.style.background='var(--surface2)'; b.style.borderColor='var(--border)'; b.style.color='var(--ink)';
   });
-  btn.style.background='var(--navy)'; btn.style.borderColor='var(--navy)'; btn.style.color='#fff';
-  if(!SEASON.preGameDecision) SEASON.preGameDecision={};
-  SEASON.preGameDecision[btn.dataset.field]=btn.dataset.val;
+  if(alreadySelected) {
+    delete SEASON.preGameDecision[field];
+  } else {
+    btn.style.background='var(--navy)'; btn.style.borderColor='var(--navy)'; btn.style.color='#fff';
+    SEASON.preGameDecision[field]=btn.dataset.val;
+  }
   updatePreGameWinProb();
 }
 
