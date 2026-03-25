@@ -2424,9 +2424,10 @@ function maybeShowPreGameModal(onConfirm, gameOverride) {
 
   $('modal-title').textContent = 'Pre-Game Decisions';
   $('modal-location').textContent = isHome ? `📍 ${myT.city}` : `📍 @ ${oppT.city}`;
+  $('modal-body').style.paddingTop = '0';
   $('modal-body').innerHTML=`
-    <div style="padding:4px 0;">
-      <div style="position:sticky;top:0;z-index:5;background:var(--surface);padding:8px 20px 10px;margin:-4px -20px 10px;border-bottom:1px solid var(--border);">
+    <div>
+      <div style="position:sticky;top:0;z-index:5;background:linear-gradient(to bottom,rgba(184,212,178,.22) 0%,var(--surface) 90%);padding:14px 20px 10px;margin:0 -20px 10px;border-bottom:1px solid var(--border);">
         <div style="font-family:'Oswald',sans-serif;font-size:.63rem;letter-spacing:3px;color:var(--muted);margin-bottom:5px;">PRE-GAME DECISIONS</div>
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:3px;flex-wrap:wrap;">
           <div style="width:10px;height:10px;border-radius:50%;background:${myT.color};flex-shrink:0;"></div>
@@ -8586,7 +8587,7 @@ function openMatchupPreview(weekIdx, gameIdx){
   $('modal-overlay').classList.add('open');
 }
 
-function closeModal(){$('modal-overlay').classList.remove('open');}
+function closeModal(){$('modal-overlay').classList.remove('open');$('modal-body').style.paddingTop='';}
 function closeModalOutside(e){if(e.target===$('modal-overlay'))closeModal();}
 
 // ═══════════════════════════════════════════════════════
