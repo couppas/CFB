@@ -77,6 +77,8 @@
 [data-theme="dark"] .conf-group-hdr{background:#1e2330;color:#c0ccdd;}
 [data-theme="dark"] .play-log{background:#1e2330;}
 *{box-sizing:border-box;margin:0;padding:0;}
+.pregame-sticky-hdr{position:sticky;top:0;z-index:5;padding:14px 20px 10px;margin:0 -20px 10px;border-bottom:1px solid var(--border);background:#d8edd8;background:linear-gradient(to bottom,#d8edd8 0%,var(--surface) 100%);}
+[data-theme="dark"] .pregame-sticky-hdr{background:#1f351f;background:linear-gradient(to bottom,#1f351f 0%,var(--surface) 100%);}
 body{background-color:#b8d4b2;color:var(--ink);font-family:'Inter',sans-serif;min-height:100vh;font-size:14px;}
 [data-theme="dark"] body{background-color:#111e12;}
 #yard-overlay{position:fixed;inset:0;pointer-events:none;z-index:-1;color:#1a4d1e;}
@@ -2430,7 +2432,7 @@ function maybeShowPreGameModal(onConfirm, gameOverride) {
   $('modal-body').style.paddingTop = '0';
   $('modal-body').innerHTML=`
     <div>
-      <div style="position:sticky;top:0;z-index:5;background:linear-gradient(to bottom,var(--pregame-hdr) 0%,var(--surface) 100%);padding:14px 20px 10px;margin:0 -20px 10px;border-bottom:1px solid var(--border);">
+      <div class="pregame-sticky-hdr">
         <div style="font-family:'Oswald',sans-serif;font-size:.63rem;letter-spacing:3px;color:var(--muted);margin-bottom:5px;">PRE-GAME DECISIONS</div>
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:3px;flex-wrap:wrap;">
           <div style="width:10px;height:10px;border-radius:50%;background:${myT.color};flex-shrink:0;"></div>
