@@ -76,6 +76,8 @@
 *{box-sizing:border-box;margin:0;padding:0;}
 body{background-color:#b8d4b2;color:var(--ink);font-family:'Inter',sans-serif;min-height:100vh;font-size:14px;}
 [data-theme="dark"] body{background-color:#111e12;}
+#yard-overlay{position:fixed;inset:0;pointer-events:none;z-index:-1;display:flex;align-items:flex-end;justify-content:space-around;padding:0 5.5% 14px;font-family:'Oswald',sans-serif;font-weight:700;font-size:clamp(12px,2vw,26px);color:#1a4d1e;opacity:.11;letter-spacing:1px;user-select:none;}
+[data-theme="dark"] #yard-overlay{color:#6dbf71;opacity:.09;}
 #app{max-width:1080px;margin:0 auto;padding:16px 20px;}
 .header{padding:16px 0 12px;border-bottom:2px solid var(--border);margin-bottom:20px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;}
 .header-logo{width:34px;height:34px;background:var(--navy);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:1rem;flex-shrink:0;}
@@ -113,12 +115,12 @@ body{background-color:#b8d4b2;color:var(--ink);font-family:'Inter',sans-serif;mi
 .btn-primary{background:var(--navy);color:#fff;}
 .btn-primary:hover{background:#162240;}
 .btn-primary:disabled{opacity:.4;cursor:not-allowed;}
-.btn-outline{background:transparent;color:var(--navy);border:1.5px solid var(--navy);}
+.btn-outline{background:var(--surface);color:var(--navy);border:1.5px solid var(--navy);}
 .btn-outline:hover{background:var(--blue-bg);}
 .btn-ghost{background:var(--surface2);color:var(--ink2);border:1px solid var(--border);}
 .btn-ghost:hover{border-color:var(--border2);background:#edf0f5;}
 .btn-success{background:#15803d;color:#fff;}
-.btn-danger{background:transparent;color:var(--red);border:1.5px solid var(--red);}
+.btn-danger{background:var(--surface);color:var(--red);border:1.5px solid var(--red);}
 .btn-danger:hover{background:var(--red-bg);}
 .btn-sm{padding:5px 12px;font-size:.72rem;letter-spacing:1.5px;}
 .badge{display:inline-block;padding:2px 7px;border-radius:4px;font-size:.68rem;font-weight:600;}
@@ -425,6 +427,7 @@ select:focus{border-color:var(--navy);}
 </style>
 </head>
 <body>
+<div id="yard-overlay" aria-hidden="true"><span>10</span><span>20</span><span>30</span><span>40</span><span>50</span><span>40</span><span>30</span><span>20</span><span>10</span></div>
 <div id="app">
   <div class="header">
     <div class="header-logo">🏈</div>
