@@ -2281,7 +2281,7 @@ function showTeamPicker() {
         <button class="btn btn-ghost" onclick="skipTeamPick()">No Team</button>
       </div>
     </div>`;
-  $('modal-overlay').classList.add('open');
+  $('modal-body').scrollTop=0;$('modal-overlay').classList.add('open');
   // Pre-fill preview if team already selected
   if(SEASON.myTeamIdx!==null && SEASON.myTeamIdx!==undefined) {
     const t=SEASON.teams[SEASON.myTeamIdx], c=SEASON.coaches?.[SEASON.myTeamIdx];
@@ -2530,7 +2530,7 @@ function maybeShowPreGameModal(onConfirm, gameOverride) {
   window._pgCb = onConfirm;
   window._pgData = {myT, oppT, isHome, myC, oppC, game};
   updatePreGameWinProb();
-  $('modal-overlay').classList.add('open');
+  $('modal-body').scrollTop=0;$('modal-overlay').classList.add('open');
 }
 
 function selectPreGameOpt(btn, field) {
@@ -3228,7 +3228,7 @@ function showOffSeasonCarousel(events, prestigeEarned) {
   $('modal-title').textContent = 'Off-Season';
   $('modal-location').textContent = '';
   renderCarousel();
-  $('modal-overlay').classList.add('open');
+  $('modal-body').scrollTop=0;$('modal-overlay').classList.add('open');
 }
 
 function buildGMCard(myIdx, myT, myC, coachFired, prestigeTotal) {
@@ -5178,7 +5178,7 @@ function openPlayoffMatchupPreview(roundIdx, gameIdx) {
   </div>`;
 
   $('modal-body').innerHTML = html;
-  $('modal-overlay').classList.add('open');
+  $('modal-body').scrollTop=0;$('modal-overlay').classList.add('open');
 }
 
 function renderHeadlines(){
@@ -8370,7 +8370,7 @@ function openBoxScore(homeTeam, awayTeam, homeScore, awayScore, boxScore, locati
     </div>
   </div>`;
 
-  $('modal-overlay').classList.add('open');
+  $('modal-body').scrollTop=0;$('modal-overlay').classList.add('open');
 }
 
 function playerStatsHTML(side){
@@ -8590,7 +8590,7 @@ function openMatchupPreview(weekIdx, gameIdx){
       </div>
     </div>
   `;
-  $('modal-overlay').classList.add('open');
+  $('modal-body').scrollTop=0;$('modal-overlay').classList.add('open');
 }
 
 function closeModal(){$('modal-overlay').classList.remove('open');$('modal-body').style.paddingTop='';}
