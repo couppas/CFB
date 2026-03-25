@@ -7021,7 +7021,7 @@ function showSchedWeek(w){
             </div>
             <span style="font-size:.72rem;color:var(--muted);flex-shrink:0;">Away</span>
           </div>
-          <div class="result-item-footer" style="display:flex;align-items:center;gap:6px;">${rivalryBadge}${(()=>{const ce=coachEdgeLabel(hT,aT,game.weather,!!game.rivalryName,false);return ce?`<span style="font-size:.6rem;background:rgba(37,99,235,.12);color:#2563eb;border:1px solid rgba(37,99,235,.25);padding:1px 6px;border-radius:8px;font-weight:600;">${ce.icon} Coaching Edge +${ce.edge} ${ce.team.name}</span>`:''})()}${game.tv?tvBadgeHTML(game.tv,game.kickoff):''}${!rivalryBadge&&!game.tv?`<span style="font-size:.62rem;color:var(--muted2);">📍 ${hT.city||''}</span>`:''}${playBtn}</div>
+          <div class="result-item-footer" style="display:flex;align-items:center;gap:6px;">${rivalryBadge}${game.tv?tvBadgeHTML(game.tv,game.kickoff):''}${!rivalryBadge&&!game.tv?`<span style="font-size:.62rem;color:var(--muted2);">📍 ${hT.city||''}</span>`:''}${playBtn}</div>
           ${(()=>{const ce=coachEdgeLabel(hT,aT,null,!!game.rivalryName,false);return ce?`<div style="padding:3px 10px 5px;font-size:.62rem;color:#7c3aed;font-weight:600;">${ce.label}</div>`:''})()}
         </div>`;
       }
