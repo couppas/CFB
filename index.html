@@ -76,8 +76,14 @@
 *{box-sizing:border-box;margin:0;padding:0;}
 body{background-color:#b8d4b2;color:var(--ink);font-family:'Inter',sans-serif;min-height:100vh;font-size:14px;}
 [data-theme="dark"] body{background-color:#111e12;}
-#yard-overlay{position:fixed;inset:0;pointer-events:none;z-index:-1;display:flex;align-items:flex-end;justify-content:space-around;padding:0 5.5% 14px;font-family:'Oswald',sans-serif;font-weight:700;font-size:clamp(12px,2vw,26px);color:#1a4d1e;opacity:.11;letter-spacing:1px;user-select:none;}
-[data-theme="dark"] #yard-overlay{color:#6dbf71;opacity:.09;}
+#yard-overlay{position:fixed;inset:0;pointer-events:none;z-index:-1;color:#1a4d1e;}
+[data-theme="dark"] #yard-overlay{color:#6dbf71;}
+.yl{position:absolute;top:0;bottom:0;transform:translateX(-50%);}
+.yl::before{content:'';position:absolute;left:50%;top:0;bottom:0;width:1px;background:currentColor;opacity:.09;}
+.yl b{position:absolute;left:calc(50% - 13px);width:26px;height:2px;background:currentColor;opacity:.14;display:block;}
+.yl b:nth-child(1){top:32%;}
+.yl b:nth-child(2){top:68%;}
+.yl span{position:absolute;bottom:16px;left:50%;transform:translateX(-50%) rotate(-90deg);font-family:'Oswald',sans-serif;font-weight:700;font-size:clamp(11px,1.4vw,20px);opacity:.13;white-space:nowrap;user-select:none;letter-spacing:1px;}
 #app{max-width:1080px;margin:0 auto;padding:16px 20px;}
 .header{padding:16px 0 12px;border-bottom:2px solid var(--border);margin-bottom:20px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;}
 .header-logo{width:34px;height:34px;background:var(--navy);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:1rem;flex-shrink:0;}
@@ -427,7 +433,17 @@ select:focus{border-color:var(--navy);}
 </style>
 </head>
 <body>
-<div id="yard-overlay" aria-hidden="true"><span>10</span><span>20</span><span>30</span><span>40</span><span>50</span><span>40</span><span>30</span><span>20</span><span>10</span></div>
+<div id="yard-overlay" aria-hidden="true">
+  <div class="yl" style="left:10%"><b></b><b></b><span>10</span></div>
+  <div class="yl" style="left:20%"><b></b><b></b><span>20</span></div>
+  <div class="yl" style="left:30%"><b></b><b></b><span>30</span></div>
+  <div class="yl" style="left:40%"><b></b><b></b><span>40</span></div>
+  <div class="yl" style="left:50%"><b></b><b></b><span>50</span></div>
+  <div class="yl" style="left:60%"><b></b><b></b><span>40</span></div>
+  <div class="yl" style="left:70%"><b></b><b></b><span>30</span></div>
+  <div class="yl" style="left:80%"><b></b><b></b><span>20</span></div>
+  <div class="yl" style="left:90%"><b></b><b></b><span>10</span></div>
+</div>
 <div id="app">
   <div class="header">
     <div class="header-logo">🏈</div>
