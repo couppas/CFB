@@ -375,12 +375,12 @@ body{background-color:#b8d4b2;color:var(--ink);font-family:'Inter',sans-serif;mi
 .opp-rank-badge{font-family:'Source Code Pro',monospace;font-size:.6rem;color:var(--gold);background:#fdf8e6;border:1px solid #e6d48a;padding:1px 4px;border-radius:3px;}
 .modal-overlay{display:none;position:fixed;inset:0;background:rgba(10,14,25,.55);z-index:1000;align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto;}
 .modal-overlay.open{display:flex;}
-.modal-box{background:var(--surface);border-radius:14px;width:100%;max-width:780px;margin:auto;box-shadow:0 20px 60px rgba(0,0,0,.25);animation:modalIn .25s ease;}
+.modal-box{background:var(--surface);border-radius:14px;width:100%;max-width:780px;margin:auto;box-shadow:0 20px 60px rgba(0,0,0,.25);animation:modalIn .25s ease;display:flex;flex-direction:column;max-height:calc(100vh - 40px);}
 @keyframes modalIn{from{opacity:0;transform:scale(.97)}to{opacity:1;transform:scale(1)}}
-.modal-header{background:var(--navy);border-radius:14px 14px 0 0;padding:16px 20px;display:flex;align-items:center;justify-content:space-between;color:#fff;}
+.modal-header{background:var(--navy);border-radius:14px 14px 0 0;padding:16px 20px;display:flex;align-items:center;justify-content:space-between;color:#fff;flex-shrink:0;}
 .modal-header-title{font-family:'Oswald',sans-serif;font-size:1rem;font-weight:700;letter-spacing:3px;text-transform:uppercase;}
 .modal-close{background:rgba(255,255,255,.15);border:none;color:#fff;border-radius:5px;padding:5px 10px;cursor:pointer;font-size:.8rem;letter-spacing:1px;font-family:'Oswald',sans-serif;}
-.modal-body{padding:18px 20px;}
+.modal-body{padding:18px 20px;overflow-y:auto;flex:1;}
 .bs-score-banner{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:12px;padding:18px 20px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;margin-bottom:0;}
 .bs-team{display:flex;flex-direction:column;}
 .bs-team.right{align-items:flex-end;}
@@ -2407,16 +2407,16 @@ function maybeShowPreGameModal(onConfirm, gameOverride) {
   const rzConserveHint = oppProf.def>=75 ? '🛡️ Smart floor vs their strong D' : 'Safe points, caps ceiling';
 
   function decRow(title, field, opts) {
-    return `<div style="margin-bottom:12px;">
-      <div style="font-size:.63rem;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:6px;">${title}</div>
-      <div style="display:flex;gap:6px;">${opts.map(o=>`
+    return `<div style="margin-bottom:8px;">
+      <div style="font-size:.63rem;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:4px;">${title}</div>
+      <div style="display:flex;gap:5px;">${opts.map(o=>`
         <button class="pregame-opt" data-field="${field}" data-val="${o.val}"
-          style="flex:1;padding:8px 6px;border:1px solid var(--border);border-radius:6px;background:var(--surface2);
-          font-size:.67rem;color:var(--ink);cursor:pointer;text-align:center;line-height:1.3;"
+          style="flex:1;padding:5px 4px;border:1px solid var(--border);border-radius:6px;background:var(--surface2);
+          font-size:.72rem;color:var(--ink);cursor:pointer;text-align:center;line-height:1.25;"
           onclick="selectPreGameOpt(this,'${field}')">
-          <div style="font-size:.95rem;margin-bottom:2px;">${o.icon}</div>
+          <div style="font-size:.85rem;margin-bottom:1px;">${o.icon}</div>
           <div style="font-weight:600;">${o.label}</div>
-          <div style="font-size:.58rem;color:var(--muted);margin-top:1px;">${o.desc}</div>
+          <div style="font-size:.62rem;color:var(--muted);margin-top:1px;">${o.desc}</div>
         </button>`).join('')}
       </div>
     </div>`;
@@ -2426,25 +2426,27 @@ function maybeShowPreGameModal(onConfirm, gameOverride) {
   $('modal-location').textContent = isHome ? `📍 ${myT.city}` : `📍 @ ${oppT.city}`;
   $('modal-body').innerHTML=`
     <div style="padding:4px 0;">
-      <div style="font-family:'Oswald',sans-serif;font-size:.63rem;letter-spacing:3px;color:var(--muted);margin-bottom:6px;">PRE-GAME DECISIONS</div>
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap;">
-        <div style="width:10px;height:10px;border-radius:50%;background:${myT.color};flex-shrink:0;"></div>
-        <span style="font-family:'Oswald',sans-serif;font-size:.95rem;font-weight:700;">${myT.name}</span>
-        <span style="font-size:.72rem;color:var(--muted);">(${myT.wins}-${myT.losses})</span>
-        <span style="font-size:.75rem;color:var(--muted);">${isHome?'vs':'@'}</span>
-        <div style="width:10px;height:10px;border-radius:50%;background:${oppT.color};flex-shrink:0;"></div>
-        <span style="font-family:'Oswald',sans-serif;font-size:.95rem;font-weight:700;">${oppT.name}</span>
-        <span style="font-size:.72rem;color:var(--muted);">(${oppT.wins}-${oppT.losses})</span>
-      </div>
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap;">
-        <div style="font-size:.63rem;color:var(--muted);display:flex;align-items:center;gap:5px;">
-          <span>OPP STRENGTH</span>
-          <span style="font-weight:700;color:${oppRatingColor};">${oppRatingLabel}</span>
-          <span style="color:var(--muted2);">(${oppT.rating})</span>
+      <div style="position:sticky;top:0;z-index:5;background:var(--surface);padding:8px 0 10px;margin:-4px -1px 0;border-bottom:1px solid var(--border);margin-bottom:10px;">
+        <div style="font-family:'Oswald',sans-serif;font-size:.63rem;letter-spacing:3px;color:var(--muted);margin-bottom:5px;">PRE-GAME DECISIONS</div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:3px;flex-wrap:wrap;">
+          <div style="width:10px;height:10px;border-radius:50%;background:${myT.color};flex-shrink:0;"></div>
+          <span style="font-family:'Oswald',sans-serif;font-size:.95rem;font-weight:700;">${myT.name}</span>
+          <span style="font-size:.72rem;color:var(--muted);">(${myT.wins}-${myT.losses})</span>
+          <span style="font-size:.75rem;color:var(--muted);">${isHome?'vs':'@'}</span>
+          <div style="width:10px;height:10px;border-radius:50%;background:${oppT.color};flex-shrink:0;"></div>
+          <span style="font-family:'Oswald',sans-serif;font-size:.95rem;font-weight:700;">${oppT.name}</span>
+          <span style="font-size:.72rem;color:var(--muted);">(${oppT.wins}-${oppT.losses})</span>
         </div>
-        <div style="margin-left:auto;display:flex;flex-direction:column;align-items:flex-end;">
-          <div style="font-size:.55rem;font-weight:700;letter-spacing:1.5px;color:var(--muted);text-transform:uppercase;margin-bottom:1px;">Win Probability</div>
-          <div id="pregame-wp-val" style="font-family:'Oswald',sans-serif;font-size:1.6rem;font-weight:700;line-height:1;color:${wpColor};">${myWinPct}%</div>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+          <div style="font-size:.63rem;color:var(--muted);display:flex;align-items:center;gap:5px;">
+            <span>OPP STRENGTH</span>
+            <span style="font-weight:700;color:${oppRatingColor};">${oppRatingLabel}</span>
+            <span style="color:var(--muted2);">(${oppT.rating})</span>
+          </div>
+          <div style="margin-left:auto;display:flex;align-items:baseline;gap:6px;">
+            <div style="font-size:.55rem;font-weight:700;letter-spacing:1.5px;color:var(--muted);text-transform:uppercase;">Win Prob</div>
+            <div id="pregame-wp-val" style="font-family:'Oswald',sans-serif;font-size:1.6rem;font-weight:700;line-height:1;color:${wpColor};">${myWinPct}%</div>
+          </div>
         </div>
       </div>
       ${myC?`<div style="font-size:.67rem;color:var(--muted);margin-bottom:8px;">${styleEmoji} Coach ${myC.name} · ${styleLabel}${myC.hotSeat?' 🔥':''}</div>`:''}
