@@ -2451,7 +2451,7 @@ function maybeShowPreGameModal(onConfirm, gameOverride) {
           </div>
           <div style="margin-left:auto;display:flex;align-items:baseline;gap:6px;">
             <div style="font-size:.55rem;font-weight:700;letter-spacing:1.5px;color:var(--muted);text-transform:uppercase;">Win Prob</div>
-            <div id="pregame-wp-val" style="font-family:'Oswald',sans-serif;font-size:1.6rem;font-weight:700;line-height:1;color:${wpColor};">${myWinPct}%</div>
+            <div id="pregame-wp-val" style="font-family:'Oswald',sans-serif;font-size:1.6rem;font-weight:700;line-height:1;color:var(--muted);">--%</div>
           </div>
         </div>
       </div>
@@ -2529,6 +2529,7 @@ function maybeShowPreGameModal(onConfirm, gameOverride) {
     </div>`;
   window._pgCb = onConfirm;
   window._pgData = {myT, oppT, isHome, myC, oppC, game};
+  updatePreGameWinProb();
   $('modal-overlay').classList.add('open');
 }
 
@@ -2693,7 +2694,7 @@ function updatePreGameWinProb() {
     isHome?myAdj:oppT.rating, isHome?oppT.rating:myAdj,
     true, isHome?myC:oppC, isHome?oppC:myC,
     game.weather||'clear', !!game.rivalryName, false);
-  const pct = Math.min(95, Math.round((isHome?rawWP:1-rawWP)*100));
+  const pct = Math.round((isHome?rawWP:1-rawWP)*100);
   el.textContent = pct+'%';
   el.style.color = pct>=65?'#16a34a':pct>=45?'#d97706':'#dc2626';
 }
